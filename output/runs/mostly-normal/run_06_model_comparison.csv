@@ -1,0 +1,4 @@
+model,precision,recall,f1,accuracy,roc_auc,pr_auc,label_source
+ocsvm,1.0,0.6,0.75,0.7777777777777778,0.6,0.7984126984126985,traffic_ground_truth
+isolation_forest,0.3333333333333333,0.2,0.25,0.3333333333333333,0.45,0.4755555555555555,traffic_ground_truth
+lof,0.3333333333333333,0.2,0.25,0.3333333333333333,0.25,0.401031746031746,traffic_ground_truth

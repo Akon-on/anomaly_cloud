@@ -1,0 +1,95 @@
+services:
+  victim:
+    build: ./victim
+    ports:
+      - "5000:5000"
+    volumes:
+      - victim_logs:/logs
+
+  traffic:
+    build: ./traffic
+    environment:
+      ATTACK_DURATION: ${ATTACK_DURATION:-30}
+      REQUESTS_PER_SECOND: ${REQUESTS_PER_SECOND:-10}
+      THREADS: ${THREADS:-3}
+      NORMAL_TRAFFIC_RATIO: ${NORMAL_TRAFFIC_RATIO:-0.3}
+      RANDOM_SEED: ${RANDOM_SEED:-42}
+      SCENARIO_NAME: ${SCENARIO_NAME:-adhoc}
+      LABEL_FILE: /logs/traffic_labels.jsonl
+    volumes:
+      - victim_logs:/logs
+    depends_on:
+      - victim
+
+  ml:
+    build: ./ml
+    volumes:
+      - victim_logs:/logs
+      - ./output:/app/output
+    environment:
+      DB_HOST: db
+      DB_NAME: logs
+      DB_USER: postgres
+      DB_PASSWORD: admin
+      MODEL_TYPE: isolation_forest
+      MODEL_CONTAMINATION: 0.3
+    depends_on:
+      victim:
+        condition: service_started
+      db:
+        condition: service_healthy
+
+  ml_eval:
+    build: ./ml
+    command: ["python", "-u", "evaluate_models.py"]
+    profiles: ["evaluation"]
+    volumes:
+      - victim_logs:/logs
+      - ./output:/app/output
+    environment:
+      DB_HOST: db
+      DB_NAME: logs
+      DB_USER: postgres
+      DB_PASSWORD: admin
+      EVAL_WINDOW_SIZE: 10
+      EVAL_CONTAMINATION: 0.3
+    depends_on:
+      victim:
+        condition: service_started
+      db:
+        condition: service_healthy
+
+  visual:
+    build: ./visual
+    environment:
+      DB_HOST: db
+      DB_NAME: logs
+      DB_USER: postgres
+      DB_PASSWORD: admin
+    depends_on:
+      db:
+        condition: service_healthy
+    volumes:
+      - ./output:/app/output
+
+  
+  db:
+    image: postgres:18
+    environment:
+      POSTGRES_PASSWORD: admin
+      POSTGRES_DB: logs
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql
+      - ./db/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d logs"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+ 
+
+volumes:
+  victim_logs:
+  pgdata:
