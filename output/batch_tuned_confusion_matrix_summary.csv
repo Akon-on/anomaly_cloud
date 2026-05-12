@@ -1,0 +1,16 @@
+scenario,model,best_true_negatives,best_false_positives,best_false_negatives,best_true_positives
+aggressive,ensemble_majority_vote,514.9,7.8,0.3,387.5
+aggressive,isolation_forest,498.6,24.1,13.4,374.4
+aggressive,isolation_forest_tuned,469.0,53.7,13.6,374.2
+aggressive,lof,506.9,15.8,43.4,344.4
+aggressive,ocsvm,521.9,0.8,0.1,387.7
+balanced,ensemble_majority_vote,399.7,0.2,0.0,129.7
+balanced,isolation_forest,386.1,13.8,1.2,128.5
+balanced,isolation_forest_tuned,384.6,15.3,1.6,128.1
+balanced,lof,397.8,2.1,3.7,126.0
+balanced,ocsvm,399.9,0.0,0.0,129.7
+mostly-normal,ensemble_majority_vote,691.4,1.6,0.1,84.7
+mostly-normal,isolation_forest,672.0,21.0,3.0,81.8
+mostly-normal,isolation_forest_tuned,673.2,19.8,1.9,82.9
+mostly-normal,lof,689.8,3.2,2.1,82.7
+mostly-normal,ocsvm,691.9,1.1,0.0,84.8

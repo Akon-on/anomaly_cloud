@@ -5,6 +5,11 @@ services:
       - "5000:5000"
     volumes:
       - victim_logs:/logs
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://127.0.0.1:5000/health')\""]
+      interval: 5s
+      timeout: 3s
+      retries: 20
 
   traffic:
     build: ./traffic
@@ -19,7 +24,8 @@ services:
     volumes:
       - victim_logs:/logs
     depends_on:
-      - victim
+      victim:
+        condition: service_healthy
 
   ml:
     build: ./ml
@@ -35,7 +41,7 @@ services:
       MODEL_CONTAMINATION: 0.3
     depends_on:
       victim:
-        condition: service_started
+        condition: service_healthy
       db:
         condition: service_healthy
 
@@ -53,9 +59,10 @@ services:
       DB_PASSWORD: admin
       EVAL_WINDOW_SIZE: 10
       EVAL_CONTAMINATION: 0.3
+      EVAL_MIN_BASELINE_WINDOWS: 3
     depends_on:
       victim:
-        condition: service_started
+        condition: service_healthy
       db:
         condition: service_healthy
 
@@ -69,6 +76,16 @@ services:
     depends_on:
       db:
         condition: service_healthy
+    volumes:
+      - ./output:/app/output
+
+  dashboard:
+    build: ./dashboard
+    profiles: ["dashboard"]
+    ports:
+      - "8080:8080"
+    environment:
+      OUTPUT_DIR: /app/output
     volumes:
       - ./output:/app/output
 
@@ -88,7 +105,6 @@ services:
       interval: 5s
       timeout: 3s
       retries: 20
- 
 
 volumes:
   victim_logs:

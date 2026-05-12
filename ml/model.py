@@ -1,14 +1,20 @@
 import json
-import pandas as pd
-import time
+import logging
 import os
+import time
+from pathlib import Path
+
+import numpy as np
+import pandas as pd
+import psycopg2
+from psycopg2 import OperationalError
 from sklearn.ensemble import IsolationForest
 from sklearn.neighbors import LocalOutlierFactor
 from sklearn.pipeline import make_pipeline
 from sklearn.preprocessing import StandardScaler
 from sklearn.svm import OneClassSVM
-import psycopg2
-from psycopg2 import OperationalError
+
+from feature_engineering import FEATURE_COLUMNS, build_feature_frame
 
 DB_HOST = os.getenv("DB_HOST", "db")
 DB_NAME = os.getenv("DB_NAME", "logs")
@@ -16,6 +22,30 @@ DB_USER = os.getenv("DB_USER", "postgres")
 DB_PASSWORD = os.getenv("DB_PASSWORD", "admin")
 MODEL_TYPE = os.getenv("MODEL_TYPE", "isolation_forest").lower()
 MODEL_CONTAMINATION = float(os.getenv("MODEL_CONTAMINATION", "0.3"))
+USE_THRESHOLD_TUNING = os.getenv("USE_THRESHOLD_TUNING", "true").lower() == "true"
+ANOMALY_THRESHOLD = float(os.getenv("ANOMALY_THRESHOLD", "0.1"))  # Calibrated threshold
+OUTPUT_DIR = Path(os.getenv("OUTPUT_DIR", "/app/output"))
+LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO").upper()
+REQUIRED_LOG_FIELDS = {"time", "ip", "endpoint", "status"}
+
+logging.basicConfig(
+    level=getattr(logging, LOG_LEVEL, logging.INFO),
+    format="%(asctime)s %(levelname)s %(message)s",
+)
+logger = logging.getLogger("ml")
+
+
+def normalize_log_record(record):
+    missing_fields = REQUIRED_LOG_FIELDS - set(record.keys())
+    if missing_fields:
+        return None
+
+    try:
+        record["time"] = float(record["time"])
+    except (TypeError, ValueError):
+        return None
+
+    return record
 
 
 def connect_with_retry(max_retries=30, delay_seconds=2):
@@ -28,15 +58,18 @@ def connect_with_retry(max_retries=30, delay_seconds=2):
                 password=DB_PASSWORD
             )
         except OperationalError as exc:
-            print(
-                f"DB not ready (attempt {attempt}/{max_retries}): {exc}"
+            logger.warning(
+                "DB not ready (attempt %s/%s): %s",
+                attempt,
+                max_retries,
+                exc,
             )
             time.sleep(delay_seconds)
 
     raise RuntimeError("Unable to connect to DB after retries")
 
 
-def build_model(model_name, contamination):
+def build_model(model_name, contamination, n_samples):
     if model_name == "isolation_forest":
         return IsolationForest(
             n_estimators=100,
@@ -44,10 +77,21 @@ def build_model(model_name, contamination):
             random_state=42
         )
 
+    if model_name == "isolation_forest_tuned":
+        return IsolationForest(
+            n_estimators=300,
+            max_samples="auto",
+            contamination=contamination,
+            bootstrap=True,
+            random_state=42,
+        )
+
     if model_name == "lof":
+        lof_neighbors = max(2, min(20, n_samples - 1))
         return LocalOutlierFactor(
-            n_neighbors=20,
-            contamination=contamination
+            n_neighbors=lof_neighbors,
+            contamination=contamination,
+            novelty=True
         )
 
     if model_name == "ocsvm":
@@ -57,19 +101,61 @@ def build_model(model_name, contamination):
         )
 
     raise ValueError(
-        "MODEL_TYPE must be one of: isolation_forest, lof, ocsvm"
+        "MODEL_TYPE must be one of: isolation_forest, isolation_forest_tuned, lof, ocsvm"
     )
 
 
 def predict_anomalies(model, model_name, features):
-    if model_name == "lof":
-        return model.fit_predict(features)
-
+    """Predict anomalies with optional threshold tuning.
+    
+    Returns: (predictions, scores) tuple
+      - predictions: binary array (-1 for anomaly, 1 for normal)
+      - scores: anomaly scores (higher = more anomalous)
+    """
     if model_name == "ocsvm":
         model.fit(features)
-        return model.predict(features)
+        preds = model.predict(features)
+        scores = -model.decision_function(features)
+        return preds, scores
 
-    return model.fit_predict(features)
+    model.fit(features)
+    preds = model.predict(features)
+    
+    # Get decision scores for threshold tuning
+    if hasattr(model, 'decision_function'):
+        scores = -model.decision_function(features)
+    elif hasattr(model, 'score_samples'):
+        scores = -model.score_samples(features)
+    else:
+        # Fallback: no scores available
+        scores = None
+    
+    return preds, scores
+
+
+def load_threshold_from_comparison(model_name: str) -> tuple[float | None, str]:
+    comparison_file = OUTPUT_DIR / "model_comparison.csv"
+    if not comparison_file.exists():
+        return None, "missing_comparison_file"
+
+    try:
+        comparison_df = pd.read_csv(comparison_file)
+    except Exception as exc:
+        logger.warning("Unable to read model comparison file: %s", exc)
+        return None, "comparison_read_failed"
+
+    if comparison_df.empty or "model" not in comparison_df.columns or "best_threshold" not in comparison_df.columns:
+        return None, "comparison_missing_columns"
+
+    model_rows = comparison_df[comparison_df["model"].astype(str) == model_name]
+    if model_rows.empty:
+        return None, "model_not_found_in_comparison"
+
+    threshold = model_rows.iloc[0].get("best_threshold")
+    if pd.isna(threshold):
+        return None, "threshold_not_available"
+
+    return float(threshold), "comparison_file"
 
 
 conn = connect_with_retry()
@@ -80,14 +166,31 @@ LOG_FILE = "/logs/access.log"
 WINDOW_SIZE = 10
 SLEEP_TIME = 10
 
-print("ML service starting...")
-print(f"Using model: {MODEL_TYPE} (contamination={MODEL_CONTAMINATION})")
+logger.info("ML service starting...")
+logger.info("Using model: %s (contamination=%s)", MODEL_TYPE, MODEL_CONTAMINATION)
+if USE_THRESHOLD_TUNING:
+    loaded_threshold, threshold_source = load_threshold_from_comparison(MODEL_TYPE)
+    if loaded_threshold is not None:
+        ANOMALY_THRESHOLD = loaded_threshold
+        logger.info(
+            "Loaded tuned threshold for %s from model_comparison.csv (source=%s)",
+            MODEL_TYPE,
+            threshold_source,
+        )
+    else:
+        logger.info(
+            "No tuned threshold found for %s; using configured threshold",
+            MODEL_TYPE,
+        )
+    logger.info("Threshold tuning enabled (threshold=%.4f)", ANOMALY_THRESHOLD)
+else:
+    logger.info("Using default contamination-based detection")
 
 # Wait for log file
 while not os.path.exists(LOG_FILE):
     time.sleep(1)
 
-print("Logs found. Starting real-time detection.")
+logger.info("Logs found. Starting real-time detection.")
 
 last_processed_time = 0
 
@@ -101,38 +204,44 @@ while True:
             except json.JSONDecodeError:
                 continue  # skip non-JSON lines
 
-            if data["time"] > last_processed_time:
-                records.append(data)
+            normalized = normalize_log_record(data)
+            if normalized is None:
+                continue
+
+            if normalized["time"] > last_processed_time:
+                records.append(normalized)
 
     if not records:
         time.sleep(SLEEP_TIME)
         continue
 
     df = pd.DataFrame(records)
-    df["time"] = df["time"].astype(float)
     last_processed_time = df["time"].max()
 
-    df["window"] = (df["time"] // WINDOW_SIZE).astype(int)
-
-    features = df.groupby(["ip", "window"]).agg(
-        requests_per_window=("endpoint", "count"),
-        failed_logins=("status", lambda x: (x == "fail").sum())
-    ).reset_index()
+    features = build_feature_frame(df, WINDOW_SIZE)
 
     if len(features) < 2:
         time.sleep(SLEEP_TIME)
         continue
 
-    X = features[["requests_per_window", "failed_logins"]]
+    X = features[FEATURE_COLUMNS]
 
-    model = build_model(MODEL_TYPE, MODEL_CONTAMINATION)
-    features["anomaly"] = predict_anomalies(model, MODEL_TYPE, X)
+    model = build_model(MODEL_TYPE, MODEL_CONTAMINATION, len(features))
+    preds, scores = predict_anomalies(model, MODEL_TYPE, X)
+    
+    # Apply threshold-based detection if enabled
+    if USE_THRESHOLD_TUNING and scores is not None:
+        features["anomaly"] = (scores > ANOMALY_THRESHOLD).astype(int) * 2 - 1  # Convert to -1/1
+        logger.info("Applied threshold tuning (threshold=%.4f) to %d windows", 
+                   ANOMALY_THRESHOLD, len(features))
+    else:
+        features["anomaly"] = preds
 
     anomalies = features[features["anomaly"] == -1]
 
     if not anomalies.empty:
-        print("\n ANOMALY DETECTED ")
-        print(anomalies)
+        logger.warning("ANOMALY DETECTED")
+        logger.info("%s", anomalies.to_string(index=False))
 
         for _, row in anomalies.iterrows():
             cursor.execute(
@@ -157,6 +266,6 @@ while True:
 
         conn.commit()
     else:
-        print("No anomalies.")
+        logger.info("No anomalies.")
 
     time.sleep(SLEEP_TIME)

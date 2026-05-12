@@ -1,0 +1,10 @@
+{
+  "python.analysis.extraPaths": [
+    "./",
+    "./ml",
+    "./visual",
+    "./traffic",
+    "./victim"
+  ],
+  "python.defaultInterpreterPath": "${workspaceFolder}/.venv/Scripts/python.exe"
+}

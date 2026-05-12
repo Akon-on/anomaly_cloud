@@ -1,0 +1,694 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Anomaly Cloud Dashboard</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&family=IBM+Plex+Mono:wght@400;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+</head>
+<body>
+  <main class="page">
+    <section class="hero">
+      <p class="chip">ANOMALY CLOUD</p>
+      <h1>Experiment Results Dashboard</h1>
+      <p class="lead">Advanced model performance analysis, threshold tuning results, and batch evaluation insights.</p>
+    </section>
+
+    <!-- Summary Cards -->
+    <section class="panel summary-section" id="summarySection" style="display:none;">
+      <div class="summary-grid">
+        <div class="summary-card">
+          <span class="summary-label">Best Model (Batch)</span>
+          <span class="summary-value" id="bestModelName">-</span>
+        </div>
+        <div class="summary-card">
+          <span class="summary-label">Best F1 Score (Batch)</span>
+          <span class="summary-value" id="bestF1Score">-</span>
+        </div>
+        <div class="summary-card">
+          <span class="summary-label">Total Models Compared</span>
+          <span class="summary-value" id="totalModels">0</span>
+        </div>
+      </div>
+    </section>
+
+    <!-- Controls & Filtering -->
+    <section class="panel controls-section">
+      <div class="controls-header">
+        <h2>Model Performance Analysis</h2>
+        <div class="controls-actions">
+          <button class="btn-control active" data-view="cards">Cards</button>
+          <button class="btn-control" data-view="comparison">Comparison Table</button>
+          <button class="btn-control" data-view="charts">Charts</button>
+        </div>
+      </div>
+      <div class="controls-filters">
+        <label class="filter-group">
+          <input type="checkbox" id="toggleTunedMetrics" checked>
+          <span>Show Tuned Metrics (with threshold optimization)</span>
+        </label>
+        <label class="filter-group">
+          <input type="text" id="filterInput" placeholder="Filter models by name...">
+        </label>
+        <div class="sort-controls">
+          <button class="sort-btn" data-sort="f1">Sort by F1</button>
+          <button class="sort-btn" data-sort="roc_auc">Sort by ROC-AUC</button>
+          <button class="sort-btn" data-sort="pr_auc">Sort by PR-AUC</button>
+          <button class="sort-btn" data-sort="fp_reduction">Sort by FP Reduction</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- View 1: Performance Cards -->
+    <section class="panel view-section" id="cardsView">
+      <div class="section-header">
+        <div>
+          <h2>Current Single Run Model Cards</h2>
+          <p class="section-note">These cards show the latest single run only. Use the batch section below for the overall thesis result across all runs.</p>
+        </div>
+        <button type="button" class="collapse-btn" id="toggleSingleRunBtn" aria-expanded="true">Hide Single Run</button>
+      </div>
+      <div id="singleRunContent">
+        {% if rows %}
+        <div class="metrics-grid" id="metricsGrid">
+          <!-- Populated by JavaScript -->
+        </div>
+        {% else %}
+        <p class="empty">No `model_comparison.csv` found yet in output. Run an experiment first.</p>
+        {% endif %}
+      </div>
+    </section>
+
+    <!-- View 2: Comparison Table -->
+    <section class="panel view-section" id="comparisonView" style="display:none;">
+      <h2>Model Comparison Table</h2>
+      <div class="table-wrap">
+        <table id="comparisonTable">
+          <thead>
+            <tr>
+              <th>Model</th>
+              <th title="Baseline F1 Score">F1</th>
+              <th title="Best F1 with Tuned Threshold">Best F1</th>
+              <th title="F1 Improvement %">F1 Gain</th>
+              <th>Precision</th>
+              <th>Recall</th>
+              <th>ROC-AUC</th>
+              <th>PR-AUC</th>
+              <th title="False Positives Baseline">FP</th>
+              <th title="False Positives After Tuning">Best FP</th>
+              <th title="FP Reduction %">FP Reduction</th>
+              <th>Threshold</th>
+            </tr>
+          </thead>
+          <tbody id="comparisonTableBody">
+            <!-- Populated by JavaScript -->
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- View 3: Performance Charts -->
+    <section class="panel view-section" id="chartsView" style="display:none;">
+      <h2>Performance Metrics Comparison</h2>
+      <div class="mini-charts-grid">
+        <div class="mini-chart">
+          <canvas id="f1Chart"></canvas>
+        </div>
+        <div class="mini-chart">
+          <canvas id="rocChart"></canvas>
+        </div>
+        <div class="mini-chart">
+          <canvas id="prChart"></canvas>
+        </div>
+        <div class="mini-chart">
+          <canvas id="fpChart"></canvas>
+        </div>
+      </div>
+    </section>
+
+    <!-- Batch Results Section -->
+    <section class="panel batch-section" id="batchSection" style="display:none;">
+      <h2>Batch Evaluation Results Across All Runs</h2>
+      <p class="section-note">This is the aggregate result set you should use for your final conclusion.</p>
+      <div class="batch-overview" id="batchOverview">
+        <!-- Populated by JavaScript -->
+      </div>
+      <div class="batch-summary" id="batchSummary">
+        <!-- Populated by JavaScript -->
+      </div>
+    </section>
+
+    <!-- Analysis Charts & Visualizations -->
+    <section class="panel">
+      <h2>Generated Visualizations</h2>
+      {% if images %}
+      <div class="charts-gallery">
+        {% for image in images %}
+        <div class="chart-container" onclick="openModal('/output/{{ image }}', '{{ image }}')">
+          <img src="/output/{{ image }}" alt="{{ image }}" loading="lazy" class="clickable-image">
+          <p class="chart-name">{{ image }}</p>
+        </div>
+        {% endfor %}
+      </div>
+      {% else %}
+      <p class="empty">No chart images found in output yet.</p>
+      {% endif %}
+    </section>
+  </main>
+
+  <!-- Image Modal/Lightbox -->
+  <div id="imageModal" class="modal">
+    <span class="modal-close" onclick="closeModal()">&times;</span>
+    <img id="modalImage" class="modal-content" alt="Full size image">
+    <p id="modalCaption" class="modal-caption"></p>
+    <div class="modal-nav">
+      <button class="modal-btn" onclick="prevImage()">← Previous</button>
+      <button class="modal-btn" onclick="nextImage()">Next →</button>
+    </div>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@3.9.1/dist/chart.min.js"></script>
+  <script>
+    // Shared data
+    let allModels = [];
+    let allBatchStats = [];
+    let allImages = {{ images|tojson }};
+    let currentImageIndex = 0;
+    let autoRefreshInterval = null;
+    let isAutoRefreshEnabled = true;
+
+    // Initialize dashboard on page load
+    document.addEventListener('DOMContentLoaded', async () => {
+      await loadDashboard();
+      setupEventListeners();
+      startAutoRefresh();
+      document.getElementById('liveIndicator').style.display = 'inline-flex';
+    });
+
+    function startAutoRefresh() {
+      if (autoRefreshInterval) clearInterval(autoRefreshInterval);
+      autoRefreshInterval = setInterval(async () => {
+        if (isAutoRefreshEnabled) {
+          await refreshDashboard();
+        }
+      }, 5000); // Refresh every 5 seconds
+    }
+
+    async function refreshDashboard() {
+      try {
+        // Refresh API data
+        const response = await fetch('/api/dashboard');
+        const data = await response.json();
+        
+        const newModels = data.models || [];
+        const newBatchStats = data.batch_stats || [];
+        const newBatchOverview = data.batch_overview || {};
+        
+        // Update models if changed
+        if (JSON.stringify(newModels) !== JSON.stringify(allModels)) {
+          allModels = newModels;
+          if (allModels.length > 0) {
+            renderSummary(data.summary);
+            renderCards(allModels);
+            renderComparisonTable(allModels);
+            renderCharts(allModels);
+          }
+        }
+        
+        // Update batch stats if changed
+        if (JSON.stringify(newBatchStats) !== JSON.stringify(allBatchStats)) {
+          allBatchStats = newBatchStats;
+          if (allBatchStats.length > 0) {
+            document.getElementById('batchSection').style.display = 'block';
+            renderBatchStats(allBatchStats);
+          }
+        }
+
+        if (Object.keys(newBatchOverview).length > 0) {
+          document.getElementById('batchSection').style.display = 'block';
+          renderBatchOverview(newBatchOverview);
+        }
+        
+        // Refresh images
+        await refreshImages();
+      } catch (error) {
+        console.error('Auto-refresh failed:', error);
+      }
+    }
+
+    async function refreshImages() {
+      try {
+        const response = await fetch('/api/dashboard');
+        const data = await response.json();
+        const newImages = data.images || [];
+        
+        // Check if new images were added
+        if (newImages.length > allImages.length) {
+          allImages = newImages;
+          await renderImageGallery();
+        }
+      } catch (error) {
+        console.error('Failed to refresh images:', error);
+      }
+    }
+
+    async function renderImageGallery() {
+      const gallery = document.querySelector('.charts-gallery');
+      if (!gallery) return;
+      
+      gallery.innerHTML = '';
+      allImages.forEach(image => {
+        const container = document.createElement('div');
+        container.className = 'chart-container';
+        container.onclick = () => openModal('/output/' + image, image);
+        container.innerHTML = `
+          <img src="/output/${image}" alt="${image}" loading="lazy" class="clickable-image">
+          <p class="chart-name">${image}</p>
+        `;
+        gallery.appendChild(container);
+      });
+    }
+
+    async function loadDashboard() {
+      try {
+        const response = await fetch('/api/dashboard');
+        const data = await response.json();
+        
+        allModels = data.models || [];
+        allBatchStats = data.batch_stats || [];
+        const batchOverview = data.batch_overview || {};
+
+        // Show/hide sections based on available data
+        if (allModels.length > 0) {
+          document.getElementById('summarySection').style.display = 'block';
+          document.getElementById('cardsView').style.display = 'block';
+          renderSummary(data.summary);
+          renderCards(allModels);
+          renderComparisonTable(allModels);
+        }
+
+        if (allBatchStats.length > 0) {
+          document.getElementById('batchSection').style.display = 'block';
+          renderBatchOverview(batchOverview);
+          renderBatchStats(allBatchStats);
+        }
+
+        renderCharts(allModels);
+      } catch (error) {
+        console.error('Failed to load dashboard:', error);
+      }
+    }
+
+    function setupEventListeners() {
+      const toggleSingleRunBtn = document.getElementById('toggleSingleRunBtn');
+      const singleRunContent = document.getElementById('singleRunContent');
+
+      if (toggleSingleRunBtn && singleRunContent) {
+        toggleSingleRunBtn.addEventListener('click', () => {
+          const isHidden = singleRunContent.style.display === 'none';
+          singleRunContent.style.display = isHidden ? 'block' : 'none';
+          toggleSingleRunBtn.textContent = isHidden ? 'Hide Single Run' : 'Show Single Run';
+          toggleSingleRunBtn.setAttribute('aria-expanded', String(isHidden));
+        });
+      }
+
+      // View switcher buttons
+      document.querySelectorAll('.btn-control').forEach(btn => {
+        btn.addEventListener('click', () => {
+          const view = btn.dataset.view;
+          switchView(view);
+          document.querySelectorAll('.btn-control').forEach(b => b.classList.remove('active'));
+          btn.classList.add('active');
+        });
+      });
+
+      // Filter input
+      document.getElementById('filterInput').addEventListener('input', (e) => {
+        filterAndRenderCards(e.target.value);
+      });
+
+      // Toggle tuned metrics
+      document.getElementById('toggleTunedMetrics').addEventListener('change', () => {
+        renderCards(allModels);
+        renderComparisonTable(allModels);
+      });
+
+      // Sort buttons
+      document.querySelectorAll('.sort-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+          const sortBy = btn.dataset.sort;
+          sortAndRender(sortBy);
+        });
+      });
+    }
+
+    function renderSummary(summary) {
+      if (!summary) return;
+      document.getElementById('bestModelName').textContent = summary.best_model;
+      document.getElementById('bestF1Score').textContent = summary.best_f1.toFixed(4);
+      document.getElementById('totalModels').textContent = summary.total_models;
+    }
+
+    function renderCards(models) {
+      const grid = document.getElementById('metricsGrid');
+      if (!grid) return;
+      grid.innerHTML = '';
+
+      const showTuned = document.getElementById('toggleTunedMetrics').checked;
+
+      models.forEach(model => {
+        const card = document.createElement('div');
+        card.className = 'metric-card';
+        
+        const f1Display = showTuned ? model.best_f1 : model.f1;
+        const precision = showTuned ? model.best_precision : model.precision;
+        const recall = showTuned ? model.best_recall : model.recall;
+        const fp = showTuned ? model.best_false_positives : model.false_positives;
+
+        // Color code performance
+        const performanceClass = f1Display >= 0.8 ? 'high-perf' : f1Display >= 0.6 ? 'med-perf' : 'low-perf';
+
+        card.innerHTML = `
+          <div class="card-header">
+            <h3>${model.model}</h3>
+            <span class="card-label performance-${performanceClass}">
+              ${f1Display >= 0.8 ? '✓ Excellent' : f1Display >= 0.6 ? '~ Good' : '✗ Poor'}
+            </span>
+          </div>
+          <div class="metrics">
+            <div class="metric">
+              <span class="label">F1 Score</span>
+              <span class="value">${f1Display.toFixed(3)}</span>
+              ${model.f1_improvement_pct !== 0 ? `<span class="improvement ${model.f1_improvement_pct > 0 ? 'positive' : 'negative'}">
+                ${model.f1_improvement_pct > 0 ? '+' : ''}${model.f1_improvement_pct.toFixed(1)}%
+              </span>` : ''}
+            </div>
+            <div class="metric">
+              <span class="label">Precision</span>
+              <span class="value">${precision.toFixed(3)}</span>
+            </div>
+            <div class="metric">
+              <span class="label">Recall</span>
+              <span class="value">${recall.toFixed(3)}</span>
+            </div>
+            <div class="metric">
+              <span class="label">Accuracy</span>
+              <span class="value">${model.accuracy.toFixed(3)}</span>
+            </div>
+            <div class="metric">
+              <span class="label">ROC-AUC</span>
+              <span class="value">${model.roc_auc.toFixed(3)}</span>
+            </div>
+            <div class="metric">
+              <span class="label">PR-AUC</span>
+              <span class="value">${model.pr_auc.toFixed(3)}</span>
+            </div>
+            <div class="metric threshold-metric">
+              <span class="label">Threshold</span>
+              <span class="value">${model.best_threshold.toFixed(3)}</span>
+            </div>
+            <div class="metric threshold-metric">
+              <span class="label">False Positives</span>
+              <span class="value">${fp}</span>
+              ${model.fp_reduction_pct > 0 ? `<span class="improvement positive">-${model.fp_reduction_pct.toFixed(1)}%</span>` : ''}
+            </div>
+          </div>
+        `;
+        grid.appendChild(card);
+      });
+    }
+
+    function renderComparisonTable(models) {
+      const tbody = document.getElementById('comparisonTableBody');
+      if (!tbody) return;
+      tbody.innerHTML = '';
+
+      const showTuned = document.getElementById('toggleTunedMetrics').checked;
+
+      models.forEach(model => {
+        const row = document.createElement('tr');
+        const f1 = showTuned ? model.best_f1 : model.f1;
+        const fp = showTuned ? model.best_false_positives : model.false_positives;
+        
+        row.innerHTML = `
+          <td class="model-name"><strong>${model.model}</strong></td>
+          <td>${model.f1.toFixed(4)}</td>
+          <td><strong>${model.best_f1.toFixed(4)}</strong></td>
+          <td class="${model.f1_improvement_pct > 0 ? 'positive' : model.f1_improvement_pct < 0 ? 'negative' : ''}">
+            ${model.f1_improvement_pct > 0 ? '+' : ''}${model.f1_improvement_pct.toFixed(2)}%
+          </td>
+          <td>${model.precision.toFixed(4)}</td>
+          <td>${model.recall.toFixed(4)}</td>
+          <td>${model.roc_auc.toFixed(4)}</td>
+          <td>${model.pr_auc.toFixed(4)}</td>
+          <td>${model.false_positives}</td>
+          <td>${model.best_false_positives}</td>
+          <td class="positive"><strong>${model.fp_reduction_pct.toFixed(2)}%</strong></td>
+          <td>${model.best_threshold.toFixed(4)}</td>
+        `;
+        tbody.appendChild(row);
+      });
+    }
+
+    function renderCharts(models) {
+      if (models.length === 0) return;
+
+      const modelNames = models.map(m => m.model);
+      
+      // F1 Chart
+      new Chart(document.getElementById('f1Chart'), {
+        type: 'bar',
+        data: {
+          labels: modelNames,
+          datasets: [
+            {
+              label: 'Baseline F1',
+              data: models.map(m => m.f1),
+              backgroundColor: 'rgba(255, 179, 71, 0.6)',
+              borderColor: 'rgba(255, 179, 71, 1)',
+            },
+            {
+              label: 'Tuned F1',
+              data: models.map(m => m.best_f1),
+              backgroundColor: 'rgba(56, 214, 167, 0.6)',
+              borderColor: 'rgba(56, 214, 167, 1)',
+            }
+          ]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: true,
+          plugins: { legend: { display: true, labels: { color: '#e9f2ff' } } },
+          scales: {
+            y: { max: 1, ticks: { color: '#e9f2ff' }, grid: { color: 'rgba(150, 210, 255, 0.1)' } },
+            x: { ticks: { color: '#e9f2ff' }, grid: { display: false } }
+          }
+        }
+      });
+
+      // ROC-AUC Chart
+      new Chart(document.getElementById('rocChart'), {
+        type: 'bar',
+        data: {
+          labels: modelNames,
+          datasets: [{
+            label: 'ROC-AUC',
+            data: models.map(m => m.roc_auc),
+            backgroundColor: 'rgba(76, 120, 168, 0.6)',
+            borderColor: 'rgba(76, 120, 168, 1)',
+          }]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: true,
+          plugins: { legend: { display: true, labels: { color: '#e9f2ff' } } },
+          scales: {
+            y: { max: 1, ticks: { color: '#e9f2ff' }, grid: { color: 'rgba(150, 210, 255, 0.1)' } },
+            x: { ticks: { color: '#e9f2ff' }, grid: { display: false } }
+          }
+        }
+      });
+
+      // PR-AUC Chart
+      new Chart(document.getElementById('prChart'), {
+        type: 'bar',
+        data: {
+          labels: modelNames,
+          datasets: [{
+            label: 'PR-AUC',
+            data: models.map(m => m.pr_auc),
+            backgroundColor: 'rgba(255, 150, 100, 0.6)',
+            borderColor: 'rgba(255, 150, 100, 1)',
+          }]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: true,
+          plugins: { legend: { display: true, labels: { color: '#e9f2ff' } } },
+          scales: {
+            y: { max: 1, ticks: { color: '#e9f2ff' }, grid: { color: 'rgba(150, 210, 255, 0.1)' } },
+            x: { ticks: { color: '#e9f2ff' }, grid: { display: false } }
+          }
+        }
+      });
+
+      // FP Reduction Chart
+      new Chart(document.getElementById('fpChart'), {
+        type: 'bar',
+        data: {
+          labels: modelNames,
+          datasets: [{
+            label: 'FP Reduction %',
+            data: models.map(m => m.fp_reduction_pct),
+            backgroundColor: 'rgba(150, 100, 200, 0.6)',
+            borderColor: 'rgba(150, 100, 200, 1)',
+          }]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: true,
+          plugins: { legend: { display: true, labels: { color: '#e9f2ff' } } },
+          scales: {
+            y: { ticks: { color: '#e9f2ff' }, grid: { color: 'rgba(150, 210, 255, 0.1)' } },
+            x: { ticks: { color: '#e9f2ff' }, grid: { display: false } }
+          }
+        }
+      });
+    }
+
+    function renderBatchStats(stats) {
+      const container = document.getElementById('batchSummary');
+      if (!container) return;
+      
+      const html = stats.map(stat => `
+        <div class="batch-card">
+          <div class="batch-rank">Rank ${stat.rank}</div>
+          <h4>${stat.model}</h4>
+          <div class="batch-metrics">
+            <div class="batch-metric">
+              <span>Runs</span>
+              <span class="value">${stat.runs}</span>
+            </div>
+            <div class="batch-metric">
+              <span>F1 Score</span>
+              <span class="value">${stat.f1_score}</span>
+            </div>
+            <div class="batch-metric">
+              <span>Best F1</span>
+              <span class="value">${stat.best_f1_score}</span>
+            </div>
+            <div class="batch-metric">
+              <span>ROC-AUC</span>
+              <span class="value">${stat.roc_auc}</span>
+            </div>
+            <div class="batch-metric">
+              <span>PR-AUC</span>
+              <span class="value">${stat.pr_auc}</span>
+            </div>
+          </div>
+        </div>
+      `).join('');
+      
+      container.innerHTML = html;
+    }
+
+    function renderBatchOverview(overview) {
+      const container = document.getElementById('batchOverview');
+      if (!container) return;
+
+      if (!overview || Object.keys(overview).length === 0) {
+        container.innerHTML = '';
+        return;
+      }
+
+      container.innerHTML = `
+        <div class="batch-overview-card">
+          <span class="batch-overview-label">Scenarios</span>
+          <span class="batch-overview-value">${overview.scenario_count ?? 0}</span>
+        </div>
+        <div class="batch-overview-card">
+          <span class="batch-overview-label">Runs / Scenario</span>
+          <span class="batch-overview-value">${overview.runs_per_scenario ?? 0}</span>
+        </div>
+        <div class="batch-overview-card">
+          <span class="batch-overview-label">Total Runs</span>
+          <span class="batch-overview-value">${overview.total_runs ?? 0}</span>
+        </div>
+        <div class="batch-overview-card">
+          <span class="batch-overview-label">Model Evaluations</span>
+          <span class="batch-overview-value">${overview.model_evaluations ?? 0}</span>
+        </div>
+      `;
+    }
+
+    function switchView(view) {
+      document.getElementById('cardsView').style.display = view === 'cards' ? 'block' : 'none';
+      document.getElementById('comparisonView').style.display = view === 'comparison' ? 'block' : 'none';
+      document.getElementById('chartsView').style.display = view === 'charts' ? 'block' : 'none';
+    }
+
+    function filterAndRenderCards(query) {
+      const filtered = allModels.filter(m => 
+        m.model.toLowerCase().includes(query.toLowerCase())
+      );
+      renderCards(filtered.length > 0 ? filtered : allModels);
+    }
+
+    function sortAndRender(sortBy) {
+      const sorted = [...allModels].sort((a, b) => {
+        if (sortBy === 'f1') return b.best_f1 - a.best_f1;
+        if (sortBy === 'roc_auc') return b.roc_auc - a.roc_auc;
+        if (sortBy === 'pr_auc') return b.pr_auc - a.pr_auc;
+        if (sortBy === 'fp_reduction') return b.fp_reduction_pct - a.fp_reduction_pct;
+        return 0;
+      });
+      renderCards(sorted);
+    }
+
+    // Image modal functions
+    function openModal(src, alt) {
+      const modal = document.getElementById('imageModal');
+      const modalImg = document.getElementById('modalImage');
+      const modalCaption = document.getElementById('modalCaption');
+      
+      currentImageIndex = allImages.indexOf(alt);
+      
+      modal.style.display = 'flex';
+      modalImg.src = src;
+      modalCaption.textContent = alt;
+      document.body.style.overflow = 'hidden';
+    }
+
+    function closeModal() {
+      const modal = document.getElementById('imageModal');
+      modal.style.display = 'none';
+      document.body.style.overflow = 'auto';
+    }
+
+    function nextImage() {
+      currentImageIndex = (currentImageIndex + 1) % allImages.length;
+      const img = allImages[currentImageIndex];
+      openModal('/output/' + img, img);
+    }
+
+    function prevImage() {
+      currentImageIndex = (currentImageIndex - 1 + allImages.length) % allImages.length;
+      const img = allImages[currentImageIndex];
+      openModal('/output/' + img, img);
+    }
+
+    // Keyboard shortcuts
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') closeModal();
+      if (e.key === 'ArrowRight') nextImage();
+      if (e.key === 'ArrowLeft') prevImage();
+    });
+
+    // Close modal on background click
+    document.getElementById('imageModal')?.addEventListener('click', (e) => {
+      if (e.target.id === 'imageModal') closeModal();
+    });
+  </script>

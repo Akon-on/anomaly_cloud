@@ -3,7 +3,7 @@
 Ranking rule: F1 mean desc, then PR-AUC mean desc, then ROC-AUC mean desc.
 
 | Scenario      | Rank | Model            | Runs | F1 (mean ± std) | ROC-AUC (mean ± std) | PR-AUC (mean ± std) |
-|---            |---:  |---               |---:  |---              |---                   |--                  -|
+|---------------|------|------------------|------|-----------------|----------------------|---------------------|
 | aggressive    | 1    | lof              | 10   | 0.4200 ± 0.0632 | 0.5357 ± 0.0974      | 0.7809 ± 0.0538     |
 | aggressive    | 2    | ocsvm            | 10   | 0.2666 ± 0.1654 | 0.2095 ± 0.1234      | 0.6063 ± 0.1026     |
 | aggressive    | 3    | isolation_forest | 10   | 0.2600 ± 0.0966 | 0.1286 ± 0.0779      | 0.5251 ± 0.0648     |

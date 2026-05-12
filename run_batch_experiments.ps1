@@ -1,7 +1,9 @@
 param(
     [int]$RunsPerScenario = 10,
     [string[]]$Scenarios = @("balanced", "aggressive", "mostly-normal"),
-    [int]$BaseSeed = 1000
+    [int]$BaseSeed = 1000,
+    [ValidateSet("standard", "thesis")]
+    [string]$DurationProfile = "standard"
 )
 
 $ErrorActionPreference = "Stop"
@@ -40,6 +42,12 @@ function Write-MarkdownTable {
     Set-Content -Path $Path -Value ($lines -join "`n") -Encoding UTF8
 }
 
+function Format-Percent {
+    param([double]$Value)
+
+    return "{0:N1}%" -f ($Value * 100)
+}
+
 $outputDir = Join-Path $PSScriptRoot "output"
 $runsDir = Join-Path $outputDir "runs"
 $null = New-Item -ItemType Directory -Force -Path $runsDir
@@ -48,7 +56,7 @@ $allRows = @()
 $globalRunIndex = 0
 
 Write-Host "Building images once before batch runs..."
-docker compose build ml ml_eval traffic
+docker compose build victim ml ml_eval traffic visual
 if ($LASTEXITCODE -ne 0) {
     throw "Failed to build docker images"
 }
@@ -64,7 +72,7 @@ foreach ($scenario in $Scenarios) {
         $seed = $BaseSeed + $globalRunIndex
 
         Write-Host "Run $run/$RunsPerScenario (seed=$seed)"
-        & "$PSScriptRoot\run_experiment.ps1" -Scenario $scenario -SeedOverride $seed -SkipBuild
+        & "$PSScriptRoot\run_experiment.ps1" -Scenario $scenario -SeedOverride $seed -DurationProfile $DurationProfile -SkipBuild
         if ($LASTEXITCODE -ne 0) {
             throw "Experiment failed for scenario=$scenario run=$run"
         }
@@ -88,9 +96,23 @@ foreach ($scenario in $Scenarios) {
                 recall = [double]$row.recall
                 f1 = [double]$row.f1
                 accuracy = [double]$row.accuracy
+                true_negatives = if ([string]::IsNullOrWhiteSpace($row.true_negatives)) { $null } else { [int]$row.true_negatives }
+                false_positives = if ([string]::IsNullOrWhiteSpace($row.false_positives)) { $null } else { [int]$row.false_positives }
+                false_negatives = if ([string]::IsNullOrWhiteSpace($row.false_negatives)) { $null } else { [int]$row.false_negatives }
+                true_positives = if ([string]::IsNullOrWhiteSpace($row.true_positives)) { $null } else { [int]$row.true_positives }
                 roc_auc = if ([string]::IsNullOrWhiteSpace($row.roc_auc)) { $null } else { [double]$row.roc_auc }
                 pr_auc = if ([string]::IsNullOrWhiteSpace($row.pr_auc)) { $null } else { [double]$row.pr_auc }
+                best_threshold = if ([string]::IsNullOrWhiteSpace($row.best_threshold)) { $null } else { [double]$row.best_threshold }
+                best_precision = if ([string]::IsNullOrWhiteSpace($row.best_precision)) { $null } else { [double]$row.best_precision }
+                best_recall = if ([string]::IsNullOrWhiteSpace($row.best_recall)) { $null } else { [double]$row.best_recall }
+                best_f1 = if ([string]::IsNullOrWhiteSpace($row.best_f1)) { $null } else { [double]$row.best_f1 }
+                best_true_negatives = if ([string]::IsNullOrWhiteSpace($row.best_true_negatives)) { $null } else { [int]$row.best_true_negatives }
+                best_false_positives = if ([string]::IsNullOrWhiteSpace($row.best_false_positives)) { $null } else { [int]$row.best_false_positives }
+                best_false_negatives = if ([string]::IsNullOrWhiteSpace($row.best_false_negatives)) { $null } else { [int]$row.best_false_negatives }
+                best_true_positives = if ([string]::IsNullOrWhiteSpace($row.best_true_positives)) { $null } else { [int]$row.best_true_positives }
                 label_source = $row.label_source
+                evaluation_mode = $row.evaluation_mode
+                train_samples = if ([string]::IsNullOrWhiteSpace($row.train_samples)) { $null } else { [int]$row.train_samples }
             }
         }
     }
@@ -100,6 +122,7 @@ $allRunsCsv = Join-Path $outputDir "batch_all_runs.csv"
 $allRows | Export-Csv -Path $allRunsCsv -NoTypeInformation
 
 $summaryRows = @()
+$summaryNumericRows = @()
 $groups = $allRows | Group-Object scenario, model
 
 foreach ($g in $groups) {
@@ -110,21 +133,70 @@ foreach ($g in $groups) {
     $f1Vals = @($groupRows | ForEach-Object { [double]$_.f1 })
     $rocVals = @($groupRows | Where-Object { $null -ne $_.roc_auc } | ForEach-Object { [double]$_.roc_auc })
     $prVals = @($groupRows | Where-Object { $null -ne $_.pr_auc } | ForEach-Object { [double]$_.pr_auc })
+    $bestF1Vals = @($groupRows | Where-Object { $null -ne $_.best_f1 } | ForEach-Object { [double]$_.best_f1 })
+    $f1Mean = ($f1Vals | Measure-Object -Average).Average
+    $f1Std = Get-StdDev -Values $f1Vals
+    $rocMean = if ($rocVals.Count -eq 0) { $null } else { ($rocVals | Measure-Object -Average).Average }
+    $rocStd = if ($rocVals.Count -eq 0) { $null } else { Get-StdDev -Values $rocVals }
+    $prMean = if ($prVals.Count -eq 0) { $null } else { ($prVals | Measure-Object -Average).Average }
+    $prStd = if ($prVals.Count -eq 0) { $null } else { Get-StdDev -Values $prVals }
+    $bestF1Mean = if ($bestF1Vals.Count -eq 0) { $null } else { ($bestF1Vals | Measure-Object -Average).Average }
+    $bestF1Std = if ($bestF1Vals.Count -eq 0) { $null } else { Get-StdDev -Values $bestF1Vals }
+
+    $summaryNumericRows += [pscustomobject]@{
+        scenario = $scenario
+        model = $model
+        runs = $groupRows.Count
+        f1_mean = $f1Mean
+        f1_std = $f1Std
+        roc_auc_mean = $rocMean
+        roc_auc_std = $rocStd
+        pr_auc_mean = $prMean
+        pr_auc_std = $prStd
+        best_f1_mean = $bestF1Mean
+        best_f1_std = $bestF1Std
+    }
 
     $summaryRows += [pscustomobject]@{
         scenario = $scenario
         model = $model
         runs = $groupRows.Count
-        f1_mean = "{0:N4}" -f (($f1Vals | Measure-Object -Average).Average)
-        f1_std = "{0:N4}" -f (Get-StdDev -Values $f1Vals)
-        roc_auc_mean = if ($rocVals.Count -eq 0) { "N/A" } else { "{0:N4}" -f (($rocVals | Measure-Object -Average).Average) }
-        roc_auc_std = if ($rocVals.Count -eq 0) { "N/A" } else { "{0:N4}" -f (Get-StdDev -Values $rocVals) }
-        pr_auc_mean = if ($prVals.Count -eq 0) { "N/A" } else { "{0:N4}" -f (($prVals | Measure-Object -Average).Average) }
-        pr_auc_std = if ($prVals.Count -eq 0) { "N/A" } else { "{0:N4}" -f (Get-StdDev -Values $prVals) }
+        f1_mean = "{0:N4}" -f $f1Mean
+        f1_std = "{0:N4}" -f $f1Std
+        roc_auc_mean = if ($null -eq $rocMean) { "N/A" } else { "{0:N4}" -f $rocMean }
+        roc_auc_std = if ($null -eq $rocStd) { "N/A" } else { "{0:N4}" -f $rocStd }
+        pr_auc_mean = if ($null -eq $prMean) { "N/A" } else { "{0:N4}" -f $prMean }
+        pr_auc_std = if ($null -eq $prStd) { "N/A" } else { "{0:N4}" -f $prStd }
+        best_f1_mean = if ($null -eq $bestF1Mean) { "N/A" } else { "{0:N4}" -f $bestF1Mean }
+        best_f1_std = if ($null -eq $bestF1Std) { "N/A" } else { "{0:N4}" -f $bestF1Std }
     }
 }
 
-$summarySorted = $summaryRows | Sort-Object scenario, @{Expression = "f1_mean"; Descending = $true}
+$summarySorted = $summaryRows | Sort-Object scenario, @{Expression = { [double]$_.f1_mean }; Descending = $true}
+$rankedRows = @()
+$summaryNumericRows | Group-Object scenario | ForEach-Object {
+    $rank = 0
+    $_.Group | Sort-Object @{Expression = "f1_mean"; Descending = $true} | ForEach-Object {
+        $rank++
+        $isWinner = if ($rank -eq 1) { "yes" } else { "no" }
+        $rocText = if ($null -eq $_.roc_auc_mean) { "N/A" } else { "{0:N4} +/- {1:N4}" -f $_.roc_auc_mean, $_.roc_auc_std }
+        $prText = if ($null -eq $_.pr_auc_mean) { "N/A" } else { "{0:N4} +/- {1:N4}" -f $_.pr_auc_mean, $_.pr_auc_std }
+        $bestF1Text = if ($null -eq $_.best_f1_mean) { "N/A" } else { "{0:N4} +/- {1:N4}" -f $_.best_f1_mean, $_.best_f1_std }
+
+        $rankedRows += [pscustomobject]@{
+            scenario = $_.scenario
+            rank = $rank
+            winner = $isWinner
+            model = $_.model
+            runs = $_.runs
+            f1_score = "{0:N4} +/- {1:N4}" -f $_.f1_mean, $_.f1_std
+            best_f1_score = $bestF1Text
+            f1_percent = "$(Format-Percent $_.f1_mean) +/- $(Format-Percent $_.f1_std)"
+            roc_auc = $rocText
+            pr_auc = $prText
+        }
+    }
+}
 
 $summaryCsv = Join-Path $outputDir "batch_summary_stats.csv"
 $summarySorted | Export-Csv -Path $summaryCsv -NoTypeInformation
@@ -134,11 +206,36 @@ $summarySorted | Format-Table -AutoSize | Out-String | Set-Content -Path $summar
 
 $summaryMd = Join-Path $outputDir "batch_summary_stats.md"
 Write-MarkdownTable -Path $summaryMd -Rows $summarySorted -Columns @(
-    "scenario", "model", "runs", "f1_mean", "f1_std", "roc_auc_mean", "roc_auc_std", "pr_auc_mean", "pr_auc_std"
+    "scenario", "model", "runs", "f1_mean", "f1_std", "best_f1_mean", "best_f1_std", "roc_auc_mean", "roc_auc_std", "pr_auc_mean", "pr_auc_std"
 )
+
+$rankedCsv = Join-Path $outputDir "batch_ranked_summary.csv"
+$rankedRows | Export-Csv -Path $rankedCsv -NoTypeInformation
+
+$rankedTxt = Join-Path $outputDir "batch_ranked_summary.txt"
+$rankedRows | Format-Table -AutoSize | Out-String | Set-Content -Path $rankedTxt -Encoding UTF8
+
+$rankedMd = Join-Path $outputDir "batch_ranked_summary.md"
+Write-MarkdownTable -Path $rankedMd -Rows $rankedRows -Columns @(
+    "scenario", "rank", "winner", "model", "runs", "f1_score", "best_f1_score", "f1_percent", "roc_auc", "pr_auc"
+)
+
+Write-Host "Generating batch charts and thesis report..."
+docker compose run --rm --no-deps visual python batch_report.py
+if ($LASTEXITCODE -ne 0) {
+    throw "Failed to generate batch report artifacts"
+}
 
 Write-Host "\nBatch experiment artifacts saved:"
 Write-Host "- $allRunsCsv"
 Write-Host "- $summaryCsv"
 Write-Host "- $summaryTxt"
 Write-Host "- $summaryMd"
+Write-Host "- $rankedCsv"
+Write-Host "- $rankedTxt"
+Write-Host "- $rankedMd"
+Write-Host "- $(Join-Path $outputDir 'batch_overall_ranking.txt')"
+Write-Host "- $(Join-Path $outputDir 'batch_f1_by_scenario.png')"
+Write-Host "- $(Join-Path $outputDir 'batch_roc_auc_by_scenario.png')"
+Write-Host "- $(Join-Path $outputDir 'batch_pr_auc_by_scenario.png')"
+Write-Host "- $(Join-Path $outputDir 'thesis_results_report.md')"

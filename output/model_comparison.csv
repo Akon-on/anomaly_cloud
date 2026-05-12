@@ -1,4 +1,6 @@
-model,precision,recall,f1,accuracy,roc_auc,pr_auc,label_source
-lof,1.0,0.6,0.75,0.7777777777777778,0.8,0.9055555555555557,traffic_ground_truth
-ocsvm,1.0,0.6,0.75,0.7777777777777778,0.8,0.8647619047619046,traffic_ground_truth
-isolation_forest,0.0,0.0,0.0,0.1111111111111111,0.05,0.352936507936508,traffic_ground_truth
+model,precision,recall,f1,accuracy,true_negatives,false_positives,false_negatives,true_positives,roc_auc,pr_auc,best_threshold,best_precision,best_recall,best_f1,best_true_negatives,best_false_positives,best_false_negatives,best_true_positives,label_source,evaluation_mode,train_samples
+isolation_forest,0.6666666666666666,0.4,0.5,0.6923076923076923,7,1,3,2,0.9,0.7666666666666666,-0.0,0.8333333333333334,1.0,0.9090909090909091,7,1,0,5,failed_login_proxy,in_sample_unsupervised,13
+isolation_forest_tuned,0.6666666666666666,0.4,0.5,0.6923076923076923,7,1,3,2,0.9,0.7666666666666666,-0.0,0.8333333333333334,1.0,0.9090909090909091,7,1,0,5,failed_login_proxy,in_sample_unsupervised,13
+ensemble_majority_vote,1.0,0.2,0.3333333333333333,0.6923076923076923,8,0,4,1,0.9,0.7666666666666666,-0.002781279658570446,0.8333333333333334,1.0,0.9090909090909091,7,1,0,5,failed_login_proxy,in_sample_unsupervised,13
+ocsvm,0.125,0.2,0.15384615384615385,0.15384615384615385,1,7,4,1,0.30000000000000004,0.4263888888888889,-0.0002198754749203058,0.4166666666666667,1.0,0.5882352941176471,1,7,0,5,failed_login_proxy,in_sample_unsupervised,13
+lof,0.0,0.0,0.0,0.6153846153846154,8,0,5,0,0.6,0.7314685314685314,-0.008123963500791032,1.0,0.6,0.7499999999999999,8,0,2,3,failed_login_proxy,in_sample_unsupervised,13

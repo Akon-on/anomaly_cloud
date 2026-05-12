@@ -1,6 +1,8 @@
 FROM python:3.10
 WORKDIR /app
-RUN pip install pandas matplotlib psycopg2-binary
+COPY requirements.txt .
+RUN pip install -r requirements.txt
 COPY visualize.py .
 COPY metrics.py .
+COPY batch_report.py .
 CMD ["python", "metrics.py"]

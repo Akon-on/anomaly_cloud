@@ -7,6 +7,11 @@
   - `lof`
   - `ocsvm`
 - Evaluation service `ml_eval` compares all three models and writes artifacts.
+- Evaluation now trains on warmup normal windows when explicit labels are available.
+- Evaluation uses IP-window ground truth when traffic labels include client IPs.
+- Evaluation outputs confusion matrix counts for each model.
+- Evaluation reports include the label source, evaluation mode, training sample count, and feature list.
+- Batch automation creates ranked summaries, batch charts, an overall model ranking, and a thesis results report.
 - Repeatable traffic scenarios are available via `run_experiment.ps1`.
 - Batch experiment automation is available via `run_batch_experiments.ps1`.
 
@@ -36,12 +41,24 @@ Run repeated experiments and aggregate statistics:
 ./run_batch_experiments.ps1 -RunsPerScenario 10
 ```
 
+Run longer thesis-profile experiments:
+
+```powershell
+./run_batch_experiments.ps1 -RunsPerScenario 10 -DurationProfile thesis
+```
+
 Batch artifacts in `output/`:
 
 - `batch_all_runs.csv` (raw per-run metrics)
 - `batch_summary_stats.csv` (mean/std summary)
 - `batch_summary_stats.txt` (table view)
 - `batch_summary_stats.md` (markdown table)
+- `batch_ranked_summary.txt` (per-scenario ranking)
+- `batch_overall_ranking.txt` (overall ranking)
+- `batch_f1_by_scenario.png`
+- `batch_roc_auc_by_scenario.png`
+- `batch_pr_auc_by_scenario.png`
+- `thesis_results_report.md`
 
 ## Scenario options
 
@@ -52,3 +69,5 @@ Batch artifacts in `output/`:
 ## Methodology note
 
 `traffic/traffic.py` now writes explicit ground-truth events (`normal` and `attack`) into `/logs/traffic_labels.jsonl` using warmup/attack/cooldown phases. `ml/evaluate_models.py` uses this label file as the primary ground truth and only falls back to failed-login proxy labels when the label file is unavailable.
+
+With explicit labels, the evaluator fits each anomaly model on known-normal warmup windows and then scores the full run. This is stronger than pure in-sample scoring because it better matches the practical anomaly-detection workflow: learn a baseline first, detect deviations later.

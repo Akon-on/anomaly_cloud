@@ -1,0 +1,34 @@
+name: ci
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Validate Docker Compose config
+        run: docker compose config
+
+      - name: Build ML images
+        run: docker compose build ml ml_eval
+
+      - name: Run feature engineering unit tests
+        run: docker compose run --rm --no-deps ml python test_feature_engineering.py
+
+      - name: Run evaluator unit tests
+        run: docker compose run --rm --no-deps ml python test_evaluator.py
+
+      - name: Run drift unit tests
+        run: docker compose run --rm --no-deps ml python test_drift.py
+
+      - name: Run ml_eval integration test
+        shell: pwsh
+        run: ./tests/test_ml_eval_integration.ps1

@@ -1,0 +1,5 @@
+matplotlib==3.8.4
+numpy==1.26.4
+pandas==2.2.3
+psycopg2-binary==2.9.9
+scikit-learn==1.4.2

@@ -1,5 +1,7 @@
-| model | precision | recall | f1 | accuracy | roc_auc | pr_auc | label_source |
-| --- | --- | --- | --- | --- | --- | --- | --- |
-| lof | 1.0000 | 0.6000 | 0.7500 | 0.7778 | 0.8000 | 0.9056 | traffic_ground_truth |
-| ocsvm | 1.0000 | 0.6000 | 0.7500 | 0.7778 | 0.8000 | 0.8648 | traffic_ground_truth |
-| isolation_forest | 0.0000 | 0.0000 | 0.0000 | 0.1111 | 0.0500 | 0.3529 | traffic_ground_truth |
+| model | precision | recall | f1 | accuracy | true_negatives | false_positives | false_negatives | true_positives | roc_auc | pr_auc | best_threshold | best_precision | best_recall | best_f1 | best_true_negatives | best_false_positives | best_false_negatives | best_true_positives | label_source | evaluation_mode | train_samples |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| isolation_forest | 0.6667 | 0.4000 | 0.5000 | 0.6923 | 7 | 1 | 3 | 2 | 0.9000 | 0.7667 | -0.0000 | 0.8333 | 1.0000 | 0.9091 | 7 | 1 | 0 | 5 | failed_login_proxy | in_sample_unsupervised | 13 |
+| isolation_forest_tuned | 0.6667 | 0.4000 | 0.5000 | 0.6923 | 7 | 1 | 3 | 2 | 0.9000 | 0.7667 | -0.0000 | 0.8333 | 1.0000 | 0.9091 | 7 | 1 | 0 | 5 | failed_login_proxy | in_sample_unsupervised | 13 |
+| ensemble_majority_vote | 1.0000 | 0.2000 | 0.3333 | 0.6923 | 8 | 0 | 4 | 1 | 0.9000 | 0.7667 | -0.0028 | 0.8333 | 1.0000 | 0.9091 | 7 | 1 | 0 | 5 | failed_login_proxy | in_sample_unsupervised | 13 |
+| ocsvm | 0.1250 | 0.2000 | 0.1538 | 0.1538 | 1 | 7 | 4 | 1 | 0.3000 | 0.4264 | -0.0002 | 0.4167 | 1.0000 | 0.5882 | 1 | 7 | 0 | 5 | failed_login_proxy | in_sample_unsupervised | 13 |
+| lof | 0.0000 | 0.0000 | 0.0000 | 0.6154 | 8 | 0 | 5 | 0 | 0.6000 | 0.7315 | -0.0081 | 1.0000 | 0.6000 | 0.7500 | 8 | 0 | 2 | 3 | failed_login_proxy | in_sample_unsupervised | 13 |
