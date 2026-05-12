@@ -1,6 +1,15 @@
 param(
-    [int]$RunsPerScenario = 10,
-    [string[]]$Scenarios = @("balanced", "aggressive", "mostly-normal"),
+    [int]$RunsPerScenario = 5,
+    [string[]]$Scenarios = @(
+        "balanced",
+        "aggressive",
+        "mostly-normal",
+        "credential-stuffing",
+        "endpoint-scanning",
+        "burst-traffic",
+        "slow-brute-force",
+        "mixed-attacks"
+    ),
     [int]$BaseSeed = 1000,
     [ValidateSet("standard", "thesis")]
     [string]$DurationProfile = "standard"
@@ -202,7 +211,7 @@ $summaryCsv = Join-Path $outputDir "batch_summary_stats.csv"
 $summarySorted | Export-Csv -Path $summaryCsv -NoTypeInformation
 
 $summaryTxt = Join-Path $outputDir "batch_summary_stats.txt"
-$summarySorted | Format-Table -AutoSize | Out-String | Set-Content -Path $summaryTxt -Encoding UTF8
+$summarySorted | Format-Table -AutoSize | Out-String -Width 240 | Set-Content -Path $summaryTxt -Encoding UTF8
 
 $summaryMd = Join-Path $outputDir "batch_summary_stats.md"
 Write-MarkdownTable -Path $summaryMd -Rows $summarySorted -Columns @(
@@ -213,7 +222,7 @@ $rankedCsv = Join-Path $outputDir "batch_ranked_summary.csv"
 $rankedRows | Export-Csv -Path $rankedCsv -NoTypeInformation
 
 $rankedTxt = Join-Path $outputDir "batch_ranked_summary.txt"
-$rankedRows | Format-Table -AutoSize | Out-String | Set-Content -Path $rankedTxt -Encoding UTF8
+$rankedRows | Format-Table -AutoSize | Out-String -Width 320 | Set-Content -Path $rankedTxt -Encoding UTF8
 
 $rankedMd = Join-Path $outputDir "batch_ranked_summary.md"
 Write-MarkdownTable -Path $rankedMd -Rows $rankedRows -Columns @(

@@ -9,6 +9,7 @@ from evaluate_models import (
     compute_metrics,
     compute_best_f1_threshold,
     format_metric,
+    rule_based_predictions_and_score,
 )
 
 
@@ -44,6 +45,41 @@ class EvaluatorTests(unittest.TestCase):
     def test_format_metric(self):
         self.assertEqual(format_metric(np.nan), "N/A")
         self.assertEqual(format_metric(0.123456), "0.1235")
+
+    def test_rule_based_baseline_flags_clear_threshold_violations(self):
+        features = pd.DataFrame(
+            [
+                {
+                    "requests_per_window": 2,
+                    "failed_logins": 0,
+                    "failed_login_ratio": 0.0,
+                    "error_requests": 0,
+                },
+                {
+                    "requests_per_window": 12,
+                    "failed_logins": 0,
+                    "failed_login_ratio": 0.0,
+                    "error_requests": 0,
+                },
+                {
+                    "requests_per_window": 2,
+                    "failed_logins": 4,
+                    "failed_login_ratio": 1.0,
+                    "error_requests": 0,
+                },
+                {
+                    "requests_per_window": 2,
+                    "failed_logins": 0,
+                    "failed_login_ratio": 0.0,
+                    "error_requests": 4,
+                },
+            ]
+        )
+
+        predictions, score = rule_based_predictions_and_score(features)
+
+        self.assertEqual(predictions.tolist(), [0, 1, 1, 1])
+        self.assertGreater(score[1], score[0])
 
     def test_csv_write_roundtrip(self):
         # Simulate one model row and ensure CSV roundtrip preserves columns

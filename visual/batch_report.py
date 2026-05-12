@@ -1,13 +1,45 @@
 from pathlib import Path
 import textwrap
 
+import matplotlib
+matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import pandas as pd
 
 
 OUTPUT_DIR = Path("output")
 ALL_RUNS = OUTPUT_DIR / "batch_all_runs.csv"
-DISPLAY_MODELS = ["lof", "ocsvm", "isolation_forest"]
+DISPLAY_MODELS = [
+    "rule_based_baseline",
+    "lof",
+    "ocsvm",
+    "isolation_forest",
+    "isolation_forest_tuned",
+    "ensemble_majority_vote",
+]
+MODEL_LABELS = {
+    "rule_based_baseline": "Rule",
+    "lof": "LOF",
+    "ocsvm": "OCSVM",
+    "isolation_forest": "IF",
+    "isolation_forest_tuned": "IF Tuned",
+    "ensemble_majority_vote": "Ensemble",
+}
+
+
+def model_sort_key(model):
+    if model in DISPLAY_MODELS:
+        return DISPLAY_MODELS.index(model)
+    return len(DISPLAY_MODELS)
+
+
+def display_model(model):
+    return MODEL_LABELS.get(str(model), str(model).replace("_", " "))
+
+
+def display_scenario(scenario):
+    value = str(scenario).replace("-", " ")
+    return textwrap.fill(value, width=14)
 
 
 def format_metric(value):
@@ -107,26 +139,48 @@ def make_overall_outputs(overall):
 def plot_table_image(rows, columns, title, path):
     display_df = pd.DataFrame(rows, columns=columns)
     if "model" in display_df.columns:
-        display_df["model"] = display_df["model"].map(
-            lambda value: textwrap.fill(str(value), width=12) if isinstance(value, str) and len(value) > 12 else value
-        )
-    fig_height = max(3.4, 0.58 * (len(display_df) + 2))
-    fig_width = max(10, 1.45 * len(columns))
+        display_df["model"] = display_df["model"].map(display_model)
+    if "scenario" in display_df.columns:
+        display_df["scenario"] = display_df["scenario"].map(display_scenario)
+
+    fig_height = max(4.0, 0.42 * (len(display_df) + 3))
+    fig_width = max(12.5, 1.75 * len(columns))
     fig, ax = plt.subplots(figsize=(fig_width, fig_height))
     ax.axis("off")
     ax.set_title(title, fontsize=15, pad=14)
 
+    width_by_column = {
+        "scenario": 0.20,
+        "model": 0.13,
+        "rank": 0.06,
+        "runs": 0.07,
+        "winner": 0.08,
+        "f1": 0.14,
+        "f1_score": 0.15,
+        "best_f1": 0.15,
+        "best_f1_score": 0.15,
+        "f1_percent": 0.15,
+        "roc_auc": 0.15,
+        "pr_auc": 0.15,
+    }
+    raw_widths = [width_by_column.get(column, 0.12) for column in columns]
+    width_total = sum(raw_widths)
+    col_widths = [width / width_total for width in raw_widths]
+    col_labels = [textwrap.fill(column.replace("_", " "), width=12) for column in columns]
+
     table = ax.table(
         cellText=display_df.values,
-        colLabels=display_df.columns,
+        colLabels=col_labels,
         cellLoc="center",
         loc="center",
+        colWidths=col_widths,
     )
     table.auto_set_font_size(False)
-    table.set_fontsize(9)
-    table.scale(1, 1.65)
+    table.set_fontsize(8.5 if len(display_df) <= 25 else 7.4)
+    table.scale(1, 1.45)
 
     for (row, _), cell in table.get_celld().items():
+        cell.PAD = 0.025
         if row == 0:
             cell.set_text_props(weight="bold", color="white")
             cell.set_facecolor("#2f4b7c")
@@ -141,71 +195,102 @@ def plot_table_image(rows, columns, title, path):
 def plot_grouped_metric(summary, metric, ylabel, path):
     scenarios = list(summary["scenario"].drop_duplicates())
     models = [model for model in DISPLAY_MODELS if model in set(summary["model"])]
-    x = range(len(scenarios))
-    width = 0.24
-    offsets = {
-        model: (index - (len(models) - 1) / 2) * width
-        for index, model in enumerate(models)
-    }
+    if not models:
+        models = sorted(summary["model"].unique(), key=model_sort_key)
 
-    fig, ax = plt.subplots(figsize=(10, 5.4))
-    for model in models:
+    group_gap = 0.8
+    y_positions = {}
+    scenario_centers = []
+    current_y = 0.0
+    for scenario in scenarios:
+        start_y = current_y
+        for model in models:
+            y_positions[(scenario, model)] = current_y
+            current_y += 1.0
+        scenario_centers.append(start_y + (len(models) - 1) / 2)
+        current_y += group_gap
+
+    fig_height = max(7.0, 0.36 * current_y + 2.2)
+    fig, ax = plt.subplots(figsize=(13.5, fig_height))
+    color_cycle = plt.rcParams["axes.prop_cycle"].by_key()["color"]
+
+    for model_index, model in enumerate(models):
         means = []
         errors = []
+        positions = []
         for scenario in scenarios:
             row = summary[
                 (summary["scenario"] == scenario) & (summary["model"] == model)
             ]
             if row.empty:
-                means.append(0)
-                errors.append(0)
-            else:
-                means.append(float(row.iloc[0][f"{metric}_mean"]))
-                errors.append(float(row.iloc[0][f"{metric}_std"]))
+                continue
 
-        positions = [value + offsets[model] for value in x]
-        bars = ax.bar(
+            mean_value = row.iloc[0][f"{metric}_mean"]
+            if pd.isna(mean_value):
+                continue
+
+            std_value = row.iloc[0][f"{metric}_std"]
+            means.append(float(mean_value))
+            errors.append(0.0 if pd.isna(std_value) else float(std_value))
+            positions.append(y_positions[(scenario, model)])
+
+        bars = ax.barh(
             positions,
             means,
-            width=width,
-            yerr=errors,
+            height=0.72,
+            xerr=errors,
             capsize=3,
+            color=color_cycle[model_index % len(color_cycle)],
             ecolor="#555555",
             error_kw={"elinewidth": 1, "capthick": 1},
-            label=model,
+            label=display_model(model),
         )
         for bar, mean in zip(bars, means):
-            if pd.isna(mean):
-                continue
-            label_y = mean - 0.055 if mean >= 0.88 else mean + 0.03
-            label_va = "top" if mean >= 0.88 else "bottom"
-            label_color = "#222222" if mean >= 0.88 else "#222222"
+            if mean >= 0.96:
+                label_x = mean - 0.015
+                label_ha = "right"
+            else:
+                label_x = mean + 0.018
+                label_ha = "left"
             ax.text(
-                bar.get_x() + bar.get_width() / 2,
-                label_y,
+                label_x,
+                bar.get_y() + bar.get_height() / 2,
                 f"{mean:.3f}",
-                ha="center",
-                va=label_va,
+                ha=label_ha,
+                va="center",
                 fontsize=8,
-                color=label_color,
                 fontweight="bold",
+                color="#222222",
             )
 
-    ax.set_xticks(list(x))
-    ax.set_xticklabels(scenarios)
-    ax.set_ylim(0, 1.10)
-    ax.set_ylabel(ylabel)
+    ax.set_yticks(scenario_centers)
+    ax.set_yticklabels([display_scenario(scenario) for scenario in scenarios])
+    ax.set_xlim(0, 1.12)
+    ax.set_xlabel(ylabel)
     ax.set_title(f"{ylabel} by Scenario and Model")
-    ax.grid(axis="y", alpha=0.3)
-    ax.legend(loc="lower left", frameon=True)
-    fig.tight_layout()
-    fig.savefig(path, dpi=160)
+    ax.grid(axis="x", alpha=0.3)
+    ax.invert_yaxis()
+    ax.legend(
+        loc="lower center",
+        bbox_to_anchor=(0.5, 1.01),
+        ncol=min(4, max(1, len(models))),
+        frameon=True,
+    )
+    fig.tight_layout(rect=(0, 0, 1, 0.96))
+    fig.savefig(path, dpi=160, bbox_inches="tight")
     plt.close(fig)
 
 
 def plot_batch_charts(df):
-    df = df[df["model"].isin(DISPLAY_MODELS)].copy()
-    summary = df.groupby(["scenario", "model"], as_index=False).agg(
+    known_models = set(DISPLAY_MODELS)
+    extra_models = sorted(set(df["model"]) - known_models)
+    df = df[df["model"].isin(known_models | set(extra_models))].copy()
+    df["model"] = pd.Categorical(
+        df["model"],
+        categories=DISPLAY_MODELS + extra_models,
+        ordered=True,
+    )
+    summary = df.groupby(["scenario", "model"], as_index=False, observed=True).agg(
         f1_mean=("f1", "mean"),
         f1_std=("f1", "std"),
         best_f1_mean=("best_f1", "mean"),
@@ -241,7 +326,7 @@ def plot_batch_charts(df):
 def make_ranked_summary_image(summary):
     rows = []
     for scenario, group in summary.groupby("scenario"):
-        ranked = group[group["model"].isin(DISPLAY_MODELS)].sort_values("f1_mean", ascending=False).reset_index(drop=True)
+        ranked = group.sort_values("f1_mean", ascending=False).reset_index(drop=True)
         for index, row in ranked.iterrows():
             rows.append(
                 {

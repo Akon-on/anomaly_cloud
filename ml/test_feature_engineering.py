@@ -30,6 +30,15 @@ class FeatureEngineeringTests(unittest.TestCase):
                     "status": "ok",
                     "user_agent": "AgentB",
                 },
+                {
+                    "time": 4,
+                    "ip": "10.0.0.1",
+                    "endpoint": "/admin",
+                    "status": "error_404",
+                    "status_code": 404,
+                    "method": "GET",
+                    "user_agent": "AgentB",
+                },
             ]
         )
 
@@ -38,12 +47,14 @@ class FeatureEngineeringTests(unittest.TestCase):
         self.assertEqual(len(features), 1)
         self.assertTrue(all(column in features.columns for column in FEATURE_COLUMNS))
         row = features.iloc[0]
-        self.assertEqual(row["requests_per_window"], 3)
+        self.assertEqual(row["requests_per_window"], 4)
         self.assertEqual(row["login_attempts"], 2)
-        self.assertAlmostEqual(row["login_ratio"], 2 / 3)
+        self.assertAlmostEqual(row["login_ratio"], 2 / 4)
         self.assertAlmostEqual(row["failed_login_ratio"], 1 / 2)
         self.assertEqual(row["unique_user_agents"], 2)
         self.assertEqual(row["successful_requests"], 2)
+        self.assertEqual(row["error_requests"], 1)
+        self.assertAlmostEqual(row["error_ratio"], 1 / 4)
 
     def test_missing_required_columns_raise_clear_error(self):
         raw_df = pd.DataFrame(

@@ -27,6 +27,10 @@ ANOMALY_THRESHOLD = float(os.getenv("ANOMALY_THRESHOLD", "0.1"))  # Calibrated t
 OUTPUT_DIR = Path(os.getenv("OUTPUT_DIR", "/app/output"))
 LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO").upper()
 REQUIRED_LOG_FIELDS = {"time", "ip", "endpoint", "status"}
+LOG_FILE = os.getenv("LOG_FILE", "/logs/access.log")
+WINDOW_SIZE = int(os.getenv("WINDOW_SIZE", "10"))
+SLEEP_TIME = int(os.getenv("SLEEP_TIME", "10"))
+HISTORY_WINDOWS = int(os.getenv("HISTORY_WINDOWS", "60"))
 
 logging.basicConfig(
     level=getattr(logging, LOG_LEVEL, logging.INFO),
@@ -87,7 +91,7 @@ def build_model(model_name, contamination, n_samples):
         )
 
     if model_name == "lof":
-        lof_neighbors = max(2, min(20, n_samples - 1))
+        lof_neighbors = max(1, min(20, n_samples - 1))
         return LocalOutlierFactor(
             n_neighbors=lof_neighbors,
             contamination=contamination,
@@ -133,6 +137,10 @@ def predict_anomalies(model, model_name, features):
     return preds, scores
 
 
+def score_to_predictions(scores, threshold):
+    return np.where(np.asarray(scores) >= threshold, -1, 1)
+
+
 def load_threshold_from_comparison(model_name: str) -> tuple[float | None, str]:
     comparison_file = OUTPUT_DIR / "model_comparison.csv"
     if not comparison_file.exists():
@@ -158,51 +166,14 @@ def load_threshold_from_comparison(model_name: str) -> tuple[float | None, str]:
     return float(threshold), "comparison_file"
 
 
-conn = connect_with_retry()
-
-cursor = conn.cursor()
-
-LOG_FILE = "/logs/access.log"
-WINDOW_SIZE = 10
-SLEEP_TIME = 10
-
-logger.info("ML service starting...")
-logger.info("Using model: %s (contamination=%s)", MODEL_TYPE, MODEL_CONTAMINATION)
-if USE_THRESHOLD_TUNING:
-    loaded_threshold, threshold_source = load_threshold_from_comparison(MODEL_TYPE)
-    if loaded_threshold is not None:
-        ANOMALY_THRESHOLD = loaded_threshold
-        logger.info(
-            "Loaded tuned threshold for %s from model_comparison.csv (source=%s)",
-            MODEL_TYPE,
-            threshold_source,
-        )
-    else:
-        logger.info(
-            "No tuned threshold found for %s; using configured threshold",
-            MODEL_TYPE,
-        )
-    logger.info("Threshold tuning enabled (threshold=%.4f)", ANOMALY_THRESHOLD)
-else:
-    logger.info("Using default contamination-based detection")
-
-# Wait for log file
-while not os.path.exists(LOG_FILE):
-    time.sleep(1)
-
-logger.info("Logs found. Starting real-time detection.")
-
-last_processed_time = 0
-
-while True:
+def read_new_records(log_file, last_processed_time):
     records = []
-
-    with open(LOG_FILE) as f:
-        for line in f:
+    with open(log_file, encoding="utf-8") as handle:
+        for line in handle:
             try:
                 data = json.loads(line)
             except json.JSONDecodeError:
-                continue  # skip non-JSON lines
+                continue
 
             normalized = normalize_log_record(data)
             if normalized is None:
@@ -211,61 +182,127 @@ while True:
             if normalized["time"] > last_processed_time:
                 records.append(normalized)
 
-    if not records:
-        time.sleep(SLEEP_TIME)
-        continue
+    return records
 
-    df = pd.DataFrame(records)
-    last_processed_time = df["time"].max()
 
-    features = build_feature_frame(df, WINDOW_SIZE)
+def trim_history(records, newest_time):
+    min_time = newest_time - (WINDOW_SIZE * HISTORY_WINDOWS)
+    return [record for record in records if record["time"] >= min_time]
 
-    if len(features) < 2:
-        time.sleep(SLEEP_TIME)
-        continue
 
-    X = features[FEATURE_COLUMNS]
-
-    model = build_model(MODEL_TYPE, MODEL_CONTAMINATION, len(features))
-    preds, scores = predict_anomalies(model, MODEL_TYPE, X)
-    
-    # Apply threshold-based detection if enabled
-    if USE_THRESHOLD_TUNING and scores is not None:
-        features["anomaly"] = (scores > ANOMALY_THRESHOLD).astype(int) * 2 - 1  # Convert to -1/1
-        logger.info("Applied threshold tuning (threshold=%.4f) to %d windows", 
-                   ANOMALY_THRESHOLD, len(features))
-    else:
-        features["anomaly"] = preds
-
-    anomalies = features[features["anomaly"] == -1]
-
-    if not anomalies.empty:
-        logger.warning("ANOMALY DETECTED")
-        logger.info("%s", anomalies.to_string(index=False))
-
-        for _, row in anomalies.iterrows():
-            cursor.execute(
-                """
-                INSERT INTO anomalies (
-                    ip,
-                    time_window,
-                    requests_per_window,
-                    failed_logins,
-                    model_name
-                )
-                VALUES (%s, %s, %s, %s, %s)
-                """,
-                (
-                    row["ip"],
-                    int(row["window"]),  # Python variable
-                    int(row["requests_per_window"]),
-                    int(row["failed_logins"]),
-                    MODEL_TYPE
-                )
+def insert_anomalies(cursor, anomalies):
+    for _, row in anomalies.iterrows():
+        cursor.execute(
+            """
+            INSERT INTO anomalies (
+                ip,
+                time_window,
+                requests_per_window,
+                failed_logins,
+                model_name
             )
+            VALUES (%s, %s, %s, %s, %s)
+            """,
+            (
+                row["ip"],
+                int(row["window"]),
+                int(row["requests_per_window"]),
+                int(row["failed_logins"]),
+                MODEL_TYPE
+            )
+        )
 
-        conn.commit()
+
+def run_detector():
+    anomaly_threshold = ANOMALY_THRESHOLD
+    conn = connect_with_retry()
+    cursor = conn.cursor()
+
+    logger.info("ML service starting...")
+    logger.info("Using model: %s (contamination=%s)", MODEL_TYPE, MODEL_CONTAMINATION)
+    if USE_THRESHOLD_TUNING:
+        loaded_threshold, threshold_source = load_threshold_from_comparison(MODEL_TYPE)
+        if loaded_threshold is not None:
+            anomaly_threshold = loaded_threshold
+            logger.info(
+                "Loaded tuned threshold for %s from model_comparison.csv (source=%s)",
+                MODEL_TYPE,
+                threshold_source,
+            )
+        else:
+            logger.info(
+                "No tuned threshold found for %s; using configured threshold",
+                MODEL_TYPE,
+            )
+        logger.info("Threshold tuning enabled (threshold=%.4f)", anomaly_threshold)
     else:
-        logger.info("No anomalies.")
+        logger.info("Using default contamination-based detection")
 
-    time.sleep(SLEEP_TIME)
+    while not os.path.exists(LOG_FILE):
+        time.sleep(1)
+
+    logger.info("Logs found. Starting real-time detection.")
+
+    last_processed_time = 0
+    record_history = []
+    emitted_anomalies = set()
+
+    while True:
+        records = read_new_records(LOG_FILE, last_processed_time)
+
+        if not records:
+            time.sleep(SLEEP_TIME)
+            continue
+
+        newest_time = max(record["time"] for record in records)
+        last_processed_time = newest_time
+        record_history.extend(records)
+        record_history = trim_history(record_history, newest_time)
+
+        features = build_feature_frame(pd.DataFrame(record_history), WINDOW_SIZE)
+
+        if len(features) < 2:
+            logger.info("Waiting for more feature windows before fitting model.")
+            time.sleep(SLEEP_TIME)
+            continue
+
+        X = features[FEATURE_COLUMNS]
+
+        model = build_model(MODEL_TYPE, MODEL_CONTAMINATION, len(features))
+        preds, scores = predict_anomalies(model, MODEL_TYPE, X)
+
+        if USE_THRESHOLD_TUNING and scores is not None:
+            features["anomaly"] = score_to_predictions(scores, anomaly_threshold)
+            features["anomaly_score"] = scores
+            logger.info(
+                "Applied threshold tuning (threshold=%.4f) to %d windows",
+                anomaly_threshold,
+                len(features),
+            )
+        else:
+            features["anomaly"] = preds
+
+        anomalies = features[features["anomaly"] == -1].copy()
+        if not anomalies.empty:
+            anomalies["dedupe_key"] = list(zip(anomalies["ip"], anomalies["window"]))
+            anomalies = anomalies[~anomalies["dedupe_key"].isin(emitted_anomalies)]
+
+        if not anomalies.empty:
+            logger.warning("ANOMALY DETECTED")
+            logger.info("%s", anomalies.drop(columns=["dedupe_key"]).to_string(index=False))
+
+            try:
+                insert_anomalies(cursor, anomalies)
+                conn.commit()
+                emitted_anomalies.update(anomalies["dedupe_key"])
+            except Exception:
+                conn.rollback()
+                logger.exception("Failed to persist detected anomalies")
+        else:
+            logger.info("No new anomalies.")
+
+        time.sleep(SLEEP_TIME)
+
+
+if __name__ == "__main__":
+    run_detector()

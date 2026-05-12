@@ -11,6 +11,9 @@ FEATURE_COLUMNS = [
     "login_ratio",
     "failed_login_ratio",
     "successful_requests",
+    "error_requests",
+    "error_ratio",
+    "post_requests",
     "distinct_endpoints",
     "unique_user_agents",
 ]
@@ -27,9 +30,17 @@ def prepare_log_frame(raw_df: pd.DataFrame, window_size: int) -> pd.DataFrame:
     df["ip"] = df["ip"].astype(str)
     df["endpoint"] = df["endpoint"].astype(str)
     df["status"] = df["status"].astype(str).str.lower()
+    if "method" not in df.columns:
+        df["method"] = "GET"
+    df["method"] = df["method"].astype(str).str.upper()
     if "user_agent" not in df.columns:
         df["user_agent"] = "unknown"
     df["user_agent"] = df["user_agent"].astype(str)
+    if "status_code" in df.columns:
+        df["status_code"] = pd.to_numeric(df["status_code"], errors="coerce").fillna(0)
+    else:
+        df["status_code"] = np.where(df["status"].str.startswith("error_"), 400, 200)
+    df["is_error"] = (df["status_code"] >= 400) | df["status"].str.startswith("error_")
     df["window"] = (df["time"] // window_size).astype(int)
     return df
 
@@ -43,6 +54,8 @@ def build_feature_frame(raw_df: pd.DataFrame, window_size: int) -> pd.DataFrame:
         successful_logins=("status", lambda x: (x == "success").sum()),
         login_attempts=("endpoint", lambda x: (x == "/login").sum()),
         successful_requests=("status", lambda x: (x == "ok").sum()),
+        error_requests=("is_error", "sum"),
+        post_requests=("method", lambda x: (x == "POST").sum()),
         distinct_endpoints=("endpoint", "nunique"),
         unique_user_agents=("user_agent", "nunique"),
     )
@@ -54,6 +67,9 @@ def build_feature_frame(raw_df: pd.DataFrame, window_size: int) -> pd.DataFrame:
     ).fillna(0)
     features["failed_login_ratio"] = (
         features["failed_logins"] / features["login_attempts"].replace(0, np.nan)
+    ).fillna(0)
+    features["error_ratio"] = (
+        features["error_requests"] / features["requests_per_window"]
     ).fillna(0)
 
     return features

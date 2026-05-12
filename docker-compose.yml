@@ -14,12 +14,20 @@ services:
   traffic:
     build: ./traffic
     environment:
+      TARGET: ${TARGET:-http://victim:5000}
       ATTACK_DURATION: ${ATTACK_DURATION:-30}
       REQUESTS_PER_SECOND: ${REQUESTS_PER_SECOND:-10}
       THREADS: ${THREADS:-3}
       NORMAL_TRAFFIC_RATIO: ${NORMAL_TRAFFIC_RATIO:-0.3}
+      NORMAL_LOGIN_RATIO: ${NORMAL_LOGIN_RATIO:-0.10}
+      NORMAL_LOGIN_FAILURE_RATE: ${NORMAL_LOGIN_FAILURE_RATE:-0.05}
       RANDOM_SEED: ${RANDOM_SEED:-42}
       SCENARIO_NAME: ${SCENARIO_NAME:-adhoc}
+      ATTACK_STYLE: ${ATTACK_STYLE:-brute_force}
+      WARMUP_SECONDS: ${WARMUP_SECONDS:-20}
+      COOLDOWN_SECONDS: ${COOLDOWN_SECONDS:-20}
+      NORMAL_IP_POOL: ${NORMAL_IP_POOL:-15}
+      ATTACK_IP_POOL: ${ATTACK_IP_POOL:-10}
       LABEL_FILE: /logs/traffic_labels.jsonl
     volumes:
       - victim_logs:/logs
@@ -39,6 +47,9 @@ services:
       DB_PASSWORD: admin
       MODEL_TYPE: isolation_forest
       MODEL_CONTAMINATION: 0.3
+      USE_THRESHOLD_TUNING: ${USE_THRESHOLD_TUNING:-true}
+      ANOMALY_THRESHOLD: ${ANOMALY_THRESHOLD:-0.1}
+      HISTORY_WINDOWS: ${HISTORY_WINDOWS:-60}
     depends_on:
       victim:
         condition: service_healthy
@@ -60,6 +71,10 @@ services:
       EVAL_WINDOW_SIZE: 10
       EVAL_CONTAMINATION: 0.3
       EVAL_MIN_BASELINE_WINDOWS: 3
+      RULE_REQUESTS_PER_WINDOW: ${RULE_REQUESTS_PER_WINDOW:-8}
+      RULE_FAILED_LOGINS: ${RULE_FAILED_LOGINS:-3}
+      RULE_FAILED_LOGIN_RATIO: ${RULE_FAILED_LOGIN_RATIO:-0.5}
+      RULE_ERROR_REQUESTS: ${RULE_ERROR_REQUESTS:-3}
     depends_on:
       victim:
         condition: service_healthy

@@ -1,3 +1,4 @@
+import logging
 import os
 from pathlib import Path
 
@@ -6,6 +7,13 @@ from flask import Flask, jsonify, render_template, send_from_directory
 
 app = Flask(__name__)
 OUTPUT_DIR = Path(os.getenv("OUTPUT_DIR", "/app/output"))
+LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO").upper()
+
+logging.basicConfig(
+    level=getattr(logging, LOG_LEVEL, logging.INFO),
+    format="%(asctime)s %(levelname)s %(message)s",
+)
+logger = logging.getLogger("dashboard")
 
 
 def read_model_comparison() -> pd.DataFrame:
@@ -15,7 +23,26 @@ def read_model_comparison() -> pd.DataFrame:
     try:
         return pd.read_csv(csv_path)
     except Exception:
+        logger.exception("Unable to read model comparison CSV: %s", csv_path)
         return pd.DataFrame()
+
+
+def safe_float(value, default=0.0):
+    if pd.isna(value):
+        return default
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return default
+
+
+def safe_int(value, default=0):
+    if pd.isna(value):
+        return default
+    try:
+        return int(float(value))
+    except (TypeError, ValueError):
+        return default
 
 
 def read_batch_stats() -> dict:
@@ -27,6 +54,7 @@ def read_batch_stats() -> dict:
         df = pd.read_csv(csv_path)
         return df.to_dict(orient="records")
     except Exception:
+        logger.exception("Unable to read batch ranking CSV: %s", csv_path)
         return {}
 
 
@@ -52,6 +80,7 @@ def read_batch_overview() -> dict:
             "model_evaluations": int(len(df)),
         }
     except Exception:
+        logger.exception("Unable to read batch overview CSV: %s", csv_path)
         return {}
 
 
@@ -74,6 +103,7 @@ def get_overall_best_model() -> dict:
             "f1": f1_value,
         }
     except Exception:
+        logger.exception("Unable to determine overall best model from: %s", csv_path)
         return {}
 
 
@@ -149,12 +179,12 @@ def api_dashboard():
     models = []
     for _, row in df.iterrows():
         model_name = str(row.get("model", "unknown"))
-        f1_baseline = float(row.get("f1", 0))
-        f1_tuned = float(row.get("best_f1", f1_baseline))
+        f1_baseline = safe_float(row.get("f1", 0))
+        f1_tuned = safe_float(row.get("best_f1", f1_baseline), f1_baseline)
         f1_improvement = ((f1_tuned - f1_baseline) / abs(f1_baseline)) * 100 if f1_baseline != 0 else 0
 
-        fp_baseline = int(row.get("false_positives", 0))
-        fp_tuned = int(row.get("best_false_positives", fp_baseline))
+        fp_baseline = safe_int(row.get("false_positives", 0))
+        fp_tuned = safe_int(row.get("best_false_positives", fp_baseline), fp_baseline)
         fp_reduction = ((fp_baseline - fp_tuned) / max(fp_baseline, 1)) * 100
 
         models.append({
@@ -162,19 +192,19 @@ def api_dashboard():
             "f1": round(f1_baseline, 4),
             "best_f1": round(f1_tuned, 4),
             "f1_improvement_pct": round(f1_improvement, 2),
-            "precision": round(float(row.get("precision", 0)), 4),
-            "recall": round(float(row.get("recall", 0)), 4),
-            "accuracy": round(float(row.get("accuracy", 0)), 4),
-            "roc_auc": round(float(row.get("roc_auc", 0)), 4),
-            "pr_auc": round(float(row.get("pr_auc", 0)), 4),
-            "best_precision": round(float(row.get("best_precision", 0)), 4),
-            "best_recall": round(float(row.get("best_recall", 0)), 4),
-            "best_threshold": round(float(row.get("best_threshold", 0)), 4),
+            "precision": round(safe_float(row.get("precision", 0)), 4),
+            "recall": round(safe_float(row.get("recall", 0)), 4),
+            "accuracy": round(safe_float(row.get("accuracy", 0)), 4),
+            "roc_auc": round(safe_float(row.get("roc_auc", 0)), 4),
+            "pr_auc": round(safe_float(row.get("pr_auc", 0)), 4),
+            "best_precision": round(safe_float(row.get("best_precision", 0)), 4),
+            "best_recall": round(safe_float(row.get("best_recall", 0)), 4),
+            "best_threshold": round(safe_float(row.get("best_threshold", 0)), 4),
             "false_positives": fp_baseline,
             "best_false_positives": fp_tuned,
             "fp_reduction_pct": round(fp_reduction, 2),
-            "true_positives": int(row.get("true_positives", 0)),
-            "false_negatives": int(row.get("false_negatives", 0)),
+            "true_positives": safe_int(row.get("true_positives", 0)),
+            "false_negatives": safe_int(row.get("false_negatives", 0)),
             "label_source": str(row.get("label_source", "unknown")),
         })
 

@@ -1,7 +1,10 @@
 import logging
 import os
+import textwrap
 import time
 
+import matplotlib
+matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import pandas as pd
 import psycopg2
@@ -20,6 +23,20 @@ logging.basicConfig(
     format="%(asctime)s %(levelname)s %(message)s",
 )
 logger = logging.getLogger("visual")
+
+MODEL_LABELS = {
+    "rule_based_baseline": "Rule",
+    "isolation_forest": "Isolation Forest",
+    "isolation_forest_tuned": "Isolation Forest Tuned",
+    "lof": "LOF",
+    "ocsvm": "OCSVM",
+    "ensemble_majority_vote": "Ensemble",
+}
+
+
+def display_model_name(model_name, width=18):
+    label = MODEL_LABELS.get(str(model_name), str(model_name).replace("_", " "))
+    return textwrap.fill(label, width=width)
 
 
 def connect_with_retry(max_retries=30, delay_seconds=2):
@@ -76,7 +93,7 @@ if os.path.exists(MODEL_COMPARISON_FILE):
         best_threshold_summary = None
 
 if df.empty:
-    plt.figure(figsize=(10, 5))
+    plt.figure(figsize=(12, 6.5))
 
     if os.path.exists(MODEL_COMPARISON_FILE):
         model_df = pd.read_csv(MODEL_COMPARISON_FILE)
@@ -92,7 +109,11 @@ if df.empty:
             plt.bar([i - width for i in x], f1_vals, width=width, label="F1")
             plt.bar(x, roc_vals, width=width, label="ROC-AUC")
             plt.bar([i + width for i in x], pr_vals, width=width, label="PR-AUC")
-            plt.xticks(list(x), models)
+            plt.xticks(
+                list(x),
+                [display_model_name(model, width=14) for model in models],
+                rotation=0,
+            )
             plt.ylim(0, 1)
             plt.title("No DB anomalies yet: latest model metrics")
             plt.xlabel("Model")
@@ -100,7 +121,7 @@ if df.empty:
             plt.grid(axis="y", alpha=0.3)
             plt.legend()
             plt.tight_layout()
-            plt.savefig(OUTPUT_IMAGE, dpi=160)
+            plt.savefig(OUTPUT_IMAGE, dpi=160, bbox_inches="tight")
             logger.info(
                 "No anomalies found in database. Saved fallback metrics chart to output/anomalies.png"
             )
@@ -117,7 +138,7 @@ if df.empty:
     plt.axis("off")
     plt.title("Detected anomalies")
     plt.tight_layout()
-    plt.savefig(OUTPUT_IMAGE, dpi=160)
+    plt.savefig(OUTPUT_IMAGE, dpi=160, bbox_inches="tight")
     logger.info("No anomalies found in database. Saved placeholder output/anomalies.png")
     raise SystemExit(0)
 
@@ -196,20 +217,23 @@ axes[1].tick_params(axis="x", rotation=45)
 
 model_colors = {
     "isolation_forest": "#4C78A8",
+    "isolation_forest_tuned": "#72B7B2",
     "lof": "#F58518",
-    "ocsvm": "#54A24B"
+    "ocsvm": "#54A24B",
+    "ensemble_majority_vote": "#B279A2",
+    "rule_based_baseline": "#E45756",
 }
 bar_colors = [model_colors.get(name, "#9b6db3") for name in models["model_name"]]
 
 axes[2].bar(
-    models["model_name"],
+    [display_model_name(name, width=12) for name in models["model_name"]],
     models["anomaly_count"],
     color=bar_colors
 )
 axes[2].set_title("Anomalies by model")
 axes[2].set_xlabel("Model")
 axes[2].set_ylabel("Count")
-axes[2].tick_params(axis="x", rotation=30)
+axes[2].tick_params(axis="x", rotation=0, labelsize=8)
 
 summary_ax = axes[3]
 summary_ax.set_title("Multi-model evaluation summary")
@@ -223,7 +247,7 @@ if comparison_df is not None and not comparison_df.empty:
     rows = []
     for _, row in display_df.iterrows():
         rows.append([
-            str(row["model"]),
+            display_model_name(row["model"], width=13),
             f"{float(row['f1']):.3f}",
             f"{float(row['best_f1']):.3f}",
             f"{int(row['false_positives'])}",
@@ -235,10 +259,11 @@ if comparison_df is not None and not comparison_df.empty:
         colLabels=["model", "f1", "best_f1", "fp", "best_fp"],
         cellLoc="center",
         loc="center",
+        colWidths=[0.36, 0.15, 0.17, 0.14, 0.18],
     )
     table.auto_set_font_size(False)
-    table.set_fontsize(8)
-    table.scale(1, 1.5)
+    table.set_fontsize(7.5)
+    table.scale(1, 1.65)
 
     for (r, c), cell in table.get_celld().items():
         if r == 0:
@@ -254,7 +279,7 @@ if comparison_df is not None and not comparison_df.empty:
             f"Best tuned model: {best_threshold_summary['model'].upper()} | threshold {best_threshold_summary['threshold']:.4f}",
             ha="center",
             va="bottom",
-            fontsize=10,
+            fontsize=9,
             fontweight="bold",
             transform=summary_ax.transAxes,
         )
@@ -276,6 +301,6 @@ fig.suptitle(
     fontweight="bold",
 )
 
-plt.savefig("output/anomalies.png", dpi=160)
+plt.savefig("output/anomalies.png", dpi=160, bbox_inches="tight")
 
 logger.info("Saved output/anomalies.png")

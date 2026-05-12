@@ -1,20 +1,21 @@
 # Model Report
 
-- Label source: failed_login_proxy
-- Evaluation mode: in_sample_unsupervised
-- Training samples: 13
-- Samples: 13
+- Label source: traffic_ground_truth_ip_window
+- Evaluation mode: warmup_normal_baseline
+- Training samples: 62
+- Samples: 623
 - Window size: 10
 - Contamination: 0.3
 
-- Features: requests_per_window, request_rate, failed_logins, successful_logins, login_attempts, login_ratio, failed_login_ratio, successful_requests, distinct_endpoints, unique_user_agents
+- Features: requests_per_window, request_rate, failed_logins, successful_logins, login_attempts, login_ratio, failed_login_ratio, successful_requests, error_requests, error_ratio, post_requests, distinct_endpoints, unique_user_agents
 
 ## Model Comparison (Sorted by F1)
 
 | model | precision | recall | f1 | accuracy | true_negatives | false_positives | false_negatives | true_positives | roc_auc | pr_auc | best_threshold | best_precision | best_recall | best_f1 | best_true_negatives | best_false_positives | best_false_negatives | best_true_positives | label_source | evaluation_mode | train_samples |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| isolation_forest | 0.6667 | 0.4000 | 0.5000 | 0.6923 | 7 | 1 | 3 | 2 | 0.9000 | 0.7667 | -0.0000 | 0.8333 | 1.0000 | 0.9091 | 7 | 1 | 0 | 5 | failed_login_proxy | in_sample_unsupervised | 13 |
-| isolation_forest_tuned | 0.6667 | 0.4000 | 0.5000 | 0.6923 | 7 | 1 | 3 | 2 | 0.9000 | 0.7667 | -0.0000 | 0.8333 | 1.0000 | 0.9091 | 7 | 1 | 0 | 5 | failed_login_proxy | in_sample_unsupervised | 13 |
-| ensemble_majority_vote | 1.0000 | 0.2000 | 0.3333 | 0.6923 | 8 | 0 | 4 | 1 | 0.9000 | 0.7667 | -0.0028 | 0.8333 | 1.0000 | 0.9091 | 7 | 1 | 0 | 5 | failed_login_proxy | in_sample_unsupervised | 13 |
-| ocsvm | 0.1250 | 0.2000 | 0.1538 | 0.1538 | 1 | 7 | 4 | 1 | 0.3000 | 0.4264 | -0.0002 | 0.4167 | 1.0000 | 0.5882 | 1 | 7 | 0 | 5 | failed_login_proxy | in_sample_unsupervised | 13 |
-| lof | 0.0000 | 0.0000 | 0.0000 | 0.6154 | 8 | 0 | 5 | 0 | 0.6000 | 0.7315 | -0.0081 | 1.0000 | 0.6000 | 0.7500 | 8 | 0 | 2 | 3 | failed_login_proxy | in_sample_unsupervised | 13 |
+| rule_based_baseline | 0.5398 | 0.9775 | 0.6955 | 0.6950 | 216 | 185 | 5 | 217 | 0.8932 | 0.8162 | 2.0000 | 0.7191 | 0.9685 | 0.8253 | 317 | 84 | 7 | 215 | traffic_ground_truth_ip_window | rule_based_baseline | 0 |
+| ocsvm | 0.4684 | 1.0000 | 0.6379 | 0.5955 | 149 | 252 | 0 | 222 | 0.9893 | 0.9881 | 2.7449 | 0.9725 | 0.9550 | 0.9636 | 395 | 6 | 10 | 212 | traffic_ground_truth_ip_window | warmup_normal_baseline | 62 |
+| lof | 0.4658 | 0.9820 | 0.6319 | 0.5923 | 151 | 250 | 4 | 218 | 0.8940 | 0.8698 | 1.0067 | 0.9102 | 0.6847 | 0.7815 | 386 | 15 | 70 | 152 | traffic_ground_truth_ip_window | warmup_normal_baseline | 62 |
+| isolation_forest | 0.4604 | 0.9955 | 0.6296 | 0.5827 | 142 | 259 | 1 | 221 | 0.9847 | 0.9820 | 0.1444 | 0.9816 | 0.9595 | 0.9704 | 397 | 4 | 9 | 213 | traffic_ground_truth_ip_window | warmup_normal_baseline | 62 |
+| isolation_forest_tuned | 0.4595 | 0.9955 | 0.6287 | 0.5811 | 141 | 260 | 1 | 221 | 0.9774 | 0.9715 | 0.1406 | 0.9951 | 0.9144 | 0.9531 | 400 | 1 | 19 | 203 | traffic_ground_truth_ip_window | warmup_normal_baseline | 62 |
+| ensemble_majority_vote | 0.4585 | 0.9955 | 0.6278 | 0.5795 | 140 | 261 | 1 | 221 | 0.9862 | 0.9829 | 1.1087 | 0.9548 | 0.9505 | 0.9526 | 391 | 10 | 11 | 211 | traffic_ground_truth_ip_window | warmup_normal_baseline | 62 |

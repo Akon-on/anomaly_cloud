@@ -1,21 +1,63 @@
 ﻿
-scenario      model                  runs f1_mean f1_std roc_auc_mean roc_auc_std pr_auc_mean pr_auc_std best_f1_mean
---------      -----                  ---- ------- ------ ------------ ----------- ----------- ---------- ------------
-aggressive    lof                      10 0.7611  0.0755 0.9766       0.0124      0.9730      0.0160     0.9209      
-aggressive    ocsvm                    10 0.7054  0.0229 0.9994       0.0007      0.9992      0.0009     0.9988      
-aggressive    ensemble_majority_vote   10 0.7052  0.0206 0.9985       0.0021      0.9978      0.0032     0.9898      
-aggressive    isolation_forest_tuned   10 0.6986  0.0096 0.9445       0.0611      0.8635      0.1222     0.9200      
-aggressive    isolation_forest         10 0.6975  0.0088 0.9749       0.0223      0.9125      0.0599     0.9526      
-balanced      lof                      10 0.6208  0.0961 0.9929       0.0104      0.9884      0.0151     0.9773      
-balanced      ocsvm                    10 0.5556  0.0415 1.0000       0.0000      1.0000      0.0000     1.0000      
-balanced      ensemble_majority_vote   10 0.5549  0.0436 1.0000       0.0000      1.0000      0.0001     0.9992      
-balanced      isolation_forest_tuned   10 0.5234  0.0208 0.9774       0.0174      0.8747      0.0845     0.9392      
-balanced      isolation_forest         10 0.5230  0.0212 0.9804       0.0208      0.8793      0.1086     0.9464      
-mostly-normal ensemble_majority_vote   10 0.4306  0.1224 0.9998       0.0003      0.9979      0.0026     0.9918      
-mostly-normal lof                      10 0.4294  0.1295 0.9986       0.0018      0.9767      0.0519     0.9596      
-mostly-normal ocsvm                    10 0.4228  0.1372 0.9998       0.0002      0.9987      0.0017     0.9947      
-mostly-normal isolation_forest_tuned   10 0.4131  0.1189 0.9820       0.0083      0.7119      0.1701     0.8677      
-mostly-normal isolation_forest         10 0.4065  0.1133 0.9813       0.0079      0.7042      0.1552     0.8552      
+scenario            model                  runs f1_mean f1_std roc_auc_mean roc_auc_std pr_auc_mean p
+                                                                                                    r
+                                                                                                    _
+                                                                                                    a
+                                                                                                    u
+                                                                                                    c
+                                                                                                    _
+                                                                                                    s
+                                                                                                    t
+                                                                                                    d
+--------            -----                  ---- ------- ------ ------------ ----------- ----------- -
+aggressive          lof                       5 0.8626  0.0917 0.9713       0.0332      0.9782      0
+aggressive          rule_based_baseline       5 0.8027  0.0073 0.9552       0.0133      0.9616      0
+aggressive          ensemble_majority_vote    5 0.7720  0.0926 0.9988       0.0023      0.9987      0
+aggressive          ocsvm                     5 0.7587  0.0848 1.0000       0.0000      1.0000      0
+aggressive          isolation_forest_tuned    5 0.7580  0.0746 0.9644       0.0793      0.9483      0
+aggressive          isolation_forest          5 0.7546  0.0750 0.9476       0.0737      0.9052      0
+balanced            lof                       5 0.5936  0.1081 0.9669       0.0465      0.9465      0
+balanced            ensemble_majority_vote    5 0.5900  0.1248 1.0000       0.0000      1.0000      0
+balanced            ocsvm                     5 0.5659  0.0919 1.0000       0.0000      1.0000      0
+balanced            rule_based_baseline       5 0.5498  0.0356 0.9760       0.0269      0.9546      0
+balanced            isolation_forest          5 0.5477  0.0812 0.9984       0.0018      0.9945      0
+balanced            isolation_forest_tuned    5 0.5477  0.0785 0.9978       0.0023      0.9891      0
+burst-traffic       isolation_forest_tuned    5 0.5200  0.1013 0.6556       0.1601      0.2493      0
+burst-traffic       rule_based_baseline       5 0.5183  0.0206 0.9841       0.0217      0.9737      0
+burst-traffic       isolation_forest          5 0.5163  0.0887 0.7740       0.1960      0.3206      0
+burst-traffic       ocsvm                     5 0.5128  0.1057 0.9581       0.0430      0.9407      0
+burst-traffic       ensemble_majority_vote    5 0.5075  0.0780 0.9634       0.0430      0.9534      0
+burst-traffic       lof                       5 0.4967  0.0704 0.9662       0.0416      0.9567      0
+credential-stuffing rule_based_baseline       5 0.8776  0.0255 0.9317       0.0215      0.9552      0
+credential-stuffing lof                       5 0.8672  0.1036 0.9379       0.0557      0.9658      0
+credential-stuffing ensemble_majority_vote    5 0.8220  0.0305 0.9960       0.0064      0.9962      0
+credential-stuffing isolation_forest_tuned    5 0.8150  0.0233 0.8956       0.1433      0.9135      0
+credential-stuffing isolation_forest          5 0.8149  0.0247 0.7857       0.1995      0.8019      0
+credential-stuffing ocsvm                     5 0.8103  0.0285 1.0000       0.0000      1.0000      0
+endpoint-scanning   lof                       5 0.6391  0.0635 0.9888       0.0097      0.9813      0
+endpoint-scanning   rule_based_baseline       5 0.6391  0.0154 0.9584       0.0211      0.9499      0
+endpoint-scanning   ensemble_majority_vote    5 0.6384  0.0792 0.9973       0.0024      0.9948      0
+endpoint-scanning   ocsvm                     5 0.6355  0.0722 0.9946       0.0028      0.9897      0
+endpoint-scanning   isolation_forest          5 0.4903  0.1585 0.4676       0.1390      0.2932      0
+endpoint-scanning   isolation_forest_tuned    5 0.3830  0.0819 0.4474       0.1215      0.2848      0
+mixed-attacks       rule_based_baseline       5 0.6930  0.0056 0.8996       0.0114      0.7952      0
+mixed-attacks       ocsvm                     5 0.6303  0.0722 0.9966       0.0043      0.9957      0
+mixed-attacks       ensemble_majority_vote    5 0.6256  0.0684 0.9897       0.0087      0.9808      0
+mixed-attacks       lof                       5 0.6239  0.0565 0.8897       0.0886      0.8490      0
+mixed-attacks       isolation_forest          5 0.6219  0.0587 0.9923       0.0046      0.9885      0
+mixed-attacks       isolation_forest_tuned    5 0.6212  0.0598 0.9769       0.0189      0.9603      0
+mostly-normal       rule_based_baseline       5 0.8061  0.0232 0.9958       0.0004      0.9736      0
+mostly-normal       lof                       5 0.5340  0.0669 0.9961       0.0028      0.9775      0
+mostly-normal       ensemble_majority_vote    5 0.5141  0.0605 0.9990       0.0014      0.9940      0
+mostly-normal       isolation_forest          5 0.4873  0.0270 0.9862       0.0130      0.8360      0
+mostly-normal       ocsvm                     5 0.4843  0.0577 0.9990       0.0014      0.9935      0
+mostly-normal       isolation_forest_tuned    5 0.4758  0.0366 0.9786       0.0140      0.7720      0
+slow-brute-force    rule_based_baseline       5 0.7985  0.0250 0.9945       0.0016      0.9855      0
+slow-brute-force    lof                       5 0.7040  0.1069 0.9854       0.0120      0.9546      0
+slow-brute-force    ensemble_majority_vote    5 0.6992  0.1223 0.9999       0.0003      0.9997      0
+slow-brute-force    isolation_forest          5 0.6857  0.1121 0.9994       0.0007      0.9977      0
+slow-brute-force    isolation_forest_tuned    5 0.6815  0.1029 0.9999       0.0002      0.9997      0
+slow-brute-force    ocsvm                     5 0.6365  0.0508 0.9998       0.0004      0.9994      0
 
 
 

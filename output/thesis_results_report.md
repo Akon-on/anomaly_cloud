@@ -2,20 +2,25 @@
 
 ## Dataset
 
-- Total model evaluations: 150
-- Scenarios: aggressive, balanced, mostly-normal
-- Models: ensemble_majority_vote, isolation_forest, isolation_forest_tuned, lof, ocsvm
+- Total model evaluations: 240
+- Scenarios: aggressive, balanced, burst-traffic, credential-stuffing, endpoint-scanning, mixed-attacks, mostly-normal, slow-brute-force
+- Models: ensemble_majority_vote, isolation_forest, isolation_forest_tuned, lof, ocsvm, rule_based_baseline
 
 ## Overall Result
 
-The strongest overall model is `lof` with mean F1 0.6038 +/- 0.1702.
-After threshold tuning, its mean F1 can reach 0.9526 +/- 0.0412.
+The strongest overall model is `rule_based_baseline` with mean F1 0.7106 +/- 0.1264.
+After threshold tuning, its mean F1 can reach 0.9187 +/- 0.0584.
 
 ## Best Model Per Scenario
 
-- `aggressive`: `lof` (F1 0.7611 +/- 0.0755)
-- `balanced`: `lof` (F1 0.6208 +/- 0.0961)
-- `mostly-normal`: `ensemble_majority_vote` (F1 0.4306 +/- 0.1224)
+- `aggressive`: `lof` (F1 0.8626 +/- 0.0917)
+- `balanced`: `lof` (F1 0.5936 +/- 0.1081)
+- `burst-traffic`: `isolation_forest_tuned` (F1 0.5200 +/- 0.1013)
+- `credential-stuffing`: `rule_based_baseline` (F1 0.8776 +/- 0.0255)
+- `endpoint-scanning`: `lof` (F1 0.6391 +/- 0.0635)
+- `mixed-attacks`: `rule_based_baseline` (F1 0.6930 +/- 0.0056)
+- `mostly-normal`: `rule_based_baseline` (F1 0.8061 +/- 0.0232)
+- `slow-brute-force`: `rule_based_baseline` (F1 0.7985 +/- 0.0250)
 
 ## Interpretation
 

@@ -1,8 +1,11 @@
 import json
 import logging
 import os
+import textwrap
 from pathlib import Path
 
+import matplotlib
+matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
@@ -29,12 +32,29 @@ WINDOW_SIZE = int(os.getenv("EVAL_WINDOW_SIZE", "10"))
 CONTAMINATION = float(os.getenv("EVAL_CONTAMINATION", "0.3"))
 MIN_BASELINE_WINDOWS = int(os.getenv("EVAL_MIN_BASELINE_WINDOWS", "3"))
 LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO").upper()
+RULE_REQUESTS_PER_WINDOW = float(os.getenv("RULE_REQUESTS_PER_WINDOW", "8"))
+RULE_FAILED_LOGINS = float(os.getenv("RULE_FAILED_LOGINS", "3"))
+RULE_FAILED_LOGIN_RATIO = float(os.getenv("RULE_FAILED_LOGIN_RATIO", "0.5"))
+RULE_ERROR_REQUESTS = float(os.getenv("RULE_ERROR_REQUESTS", "3"))
 
 logging.basicConfig(
     level=getattr(logging, LOG_LEVEL, logging.INFO),
     format="%(asctime)s %(levelname)s %(message)s",
 )
 logger = logging.getLogger("ml_eval")
+
+MODEL_LABELS = {
+    "rule_based_baseline": "Rule",
+    "isolation_forest": "Isolation Forest",
+    "isolation_forest_tuned": "Isolation Forest Tuned",
+    "lof": "LOF",
+    "ocsvm": "OCSVM",
+    "ensemble_majority_vote": "Ensemble",
+}
+
+
+def display_model_name(model_name: str) -> str:
+    return textwrap.fill(MODEL_LABELS.get(model_name, model_name.replace("_", " ")), width=22)
 
 
 def format_metric(value: object) -> str:
@@ -202,6 +222,38 @@ def fit_predict_and_score(
     return predictions, anomaly_score
 
 
+def safe_ratio(numerator: pd.Series, denominator: float) -> pd.Series:
+    if denominator <= 0:
+        return pd.Series(np.zeros(len(numerator)), index=numerator.index)
+    return numerator.astype(float) / denominator
+
+
+def rule_based_predictions_and_score(features: pd.DataFrame) -> tuple[np.ndarray, np.ndarray]:
+    score_components = pd.DataFrame(
+        {
+            "requests_per_window": safe_ratio(
+                features["requests_per_window"],
+                RULE_REQUESTS_PER_WINDOW,
+            ),
+            "failed_logins": safe_ratio(
+                features["failed_logins"],
+                RULE_FAILED_LOGINS,
+            ),
+            "failed_login_ratio": safe_ratio(
+                features["failed_login_ratio"],
+                RULE_FAILED_LOGIN_RATIO,
+            ),
+            "error_requests": safe_ratio(
+                features["error_requests"],
+                RULE_ERROR_REQUESTS,
+            ),
+        }
+    )
+    score = score_components.max(axis=1).to_numpy(dtype=float)
+    predictions = np.where(score >= 1.0, 1, 0)
+    return predictions, score
+
+
 def compute_metrics(
     y_true: pd.Series,
     y_pred_binary: pd.Series,
@@ -349,16 +401,21 @@ def plot_curves(results: dict[str, dict[str, object]], output_dir: Path) -> None
 
     if roc_entries:
         # Full comparison (all models)
-        plt.figure()
+        plt.figure(figsize=(11.5, 6.8))
         for model_name, auc_val, fpr, tpr in roc_entries:
-            plt.plot(fpr, tpr, label=f"{model_name} (AUC={auc_val:.3f})")
+            plt.plot(
+                fpr,
+                tpr,
+                linewidth=2,
+                label=f"{display_model_name(model_name)} (AUC={auc_val:.3f})",
+            )
         plt.plot([0, 1], [0, 1], linestyle="--", linewidth=1)
         plt.xlabel("False Positive Rate")
         plt.ylabel("True Positive Rate")
         plt.title("Single Run ROC Curve Comparison (All Models)")
-        plt.legend()
+        plt.legend(loc="center left", bbox_to_anchor=(1.02, 0.5), frameon=True)
         plt.tight_layout()
-        plt.savefig(output_dir / "roc_curve.png")
+        plt.savefig(output_dir / "roc_curve.png", dpi=160, bbox_inches="tight")
         plt.close()
 
     # --- PR: full set ---
@@ -371,15 +428,20 @@ def plot_curves(results: dict[str, dict[str, object]], output_dir: Path) -> None
 
     if pr_entries:
         # Full comparison (all models)
-        plt.figure()
+        plt.figure(figsize=(11.5, 6.8))
         for model_name, auc_val, recall, precision in pr_entries:
-            plt.plot(recall, precision, label=f"{model_name} (AUC={auc_val:.3f})")
+            plt.plot(
+                recall,
+                precision,
+                linewidth=2,
+                label=f"{display_model_name(model_name)} (AUC={auc_val:.3f})",
+            )
         plt.xlabel("Recall")
         plt.ylabel("Precision")
         plt.title("Single Run Precision-Recall Curve Comparison (All Models)")
-        plt.legend()
+        plt.legend(loc="center left", bbox_to_anchor=(1.02, 0.5), frameon=True)
         plt.tight_layout()
-        plt.savefig(output_dir / "pr_curve.png")
+        plt.savefig(output_dir / "pr_curve.png", dpi=160, bbox_inches="tight")
         plt.close()
 
 
@@ -419,6 +481,45 @@ def main() -> None:
     prediction_map = {}
     score_map = {}
     importance_frames = []
+
+    rule_pred_binary, rule_score = rule_based_predictions_and_score(features)
+    rule_metrics = compute_metrics(y_true, pd.Series(rule_pred_binary), rule_score)
+    rule_threshold = compute_best_f1_threshold(y_true, rule_score)
+    results["rule_based_baseline"] = rule_metrics
+    importance_frames.append(
+        compute_feature_importance(
+            "rule_based_baseline",
+            object(),
+            X_eval,
+            rule_score,
+        )
+    )
+    rows.append(
+        {
+            "model": "rule_based_baseline",
+            "precision": rule_metrics["precision"],
+            "recall": rule_metrics["recall"],
+            "f1": rule_metrics["f1"],
+            "accuracy": rule_metrics["accuracy"],
+            "true_negatives": rule_metrics["true_negatives"],
+            "false_positives": rule_metrics["false_positives"],
+            "false_negatives": rule_metrics["false_negatives"],
+            "true_positives": rule_metrics["true_positives"],
+            "roc_auc": rule_metrics["roc_auc"],
+            "pr_auc": rule_metrics["pr_auc"],
+            "best_threshold": rule_threshold["best_threshold"],
+            "best_precision": rule_threshold["best_precision"],
+            "best_recall": rule_threshold["best_recall"],
+            "best_f1": rule_threshold["best_f1"],
+            "best_true_negatives": rule_threshold["best_true_negatives"],
+            "best_false_positives": rule_threshold["best_false_positives"],
+            "best_false_negatives": rule_threshold["best_false_negatives"],
+            "best_true_positives": rule_threshold["best_true_positives"],
+            "label_source": label_source,
+            "evaluation_mode": "rule_based_baseline",
+            "train_samples": 0,
+        }
+    )
 
     for name, model in model_definitions(CONTAMINATION, len(training_features)).items():
         predictions, score = fit_predict_and_score(model, X_train, X_eval)

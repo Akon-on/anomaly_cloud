@@ -296,7 +296,7 @@ ml:
 ### Optimal Thresholds by Model
 
 ```
-Local Outlier Factor (LOF):        2.4411  ✅ Recommended
+Local Outlier Factor (LOF):        2.4411  Recommended
 Isolation Forest:                  0.0799
 Ensemble Majority Vote:            1.3720
 ```

@@ -1,0 +1,7 @@
+model,precision,recall,f1,accuracy,true_negatives,false_positives,false_negatives,true_positives,roc_auc,pr_auc,best_threshold,best_precision,best_recall,best_f1,best_true_negatives,best_false_positives,best_false_negatives,best_true_positives,label_source,evaluation_mode,train_samples
+rule_based_baseline,0.6706349206349206,1.0,0.8028503562945368,0.8641571194762684,359,83,0,169,0.9956357599935741,0.9888497451858946,2.0,0.976878612716763,1.0,0.9883040935672515,438,4,0,169,traffic_ground_truth_ip_window,rule_based_baseline,0
+ensemble_majority_vote,0.6525096525096525,1.0,0.7897196261682243,0.8527004909983633,352,90,0,169,1.0,1.0,2.0147368441412348,1.0,1.0,1.0,442,0,0,169,traffic_ground_truth_ip_window,warmup_normal_baseline,87
+isolation_forest,0.6377358490566037,1.0,0.7788018433179723,0.8428805237315876,346,96,0,169,1.0,1.0,0.2390529058367965,1.0,1.0,1.0,442,0,0,169,traffic_ground_truth_ip_window,warmup_normal_baseline,87
+isolation_forest_tuned,0.6305970149253731,1.0,0.7734553775743707,0.8379705400981997,343,99,0,169,1.0,1.0,0.19155038424199666,1.0,1.0,1.0,442,0,0,169,traffic_ground_truth_ip_window,warmup_normal_baseline,87
+lof,0.6213235294117647,1.0,0.7664399092970522,0.8314238952536824,339,103,0,169,0.9933465420760931,0.9819731436055875,0.12649739161474138,0.9184782608695652,1.0,0.9575070821529745,427,15,0,169,traffic_ground_truth_ip_window,warmup_normal_baseline,87
+ocsvm,0.47075208913649025,1.0,0.6401515151515151,0.6890343698854338,252,190,0,169,1.0,1.0,5.678660234972167,1.0,1.0,1.0,442,0,0,169,traffic_ground_truth_ip_window,warmup_normal_baseline,87
