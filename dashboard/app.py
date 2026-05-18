@@ -85,7 +85,7 @@ def read_batch_overview() -> dict:
 
 
 def get_overall_best_model() -> dict:
-    """Get the overall best model from batch results across all 15 runs."""
+    """Get the overall best model from aggregate batch results."""
     csv_path = OUTPUT_DIR / "batch_overall_ranking.csv"
     if not csv_path.exists():
         return {}
@@ -117,6 +117,8 @@ def collect_images() -> list[str]:
         "anomalies.png",
         "roc_curve.png",
         "pr_curve.png",
+        "batch_average_roc_curve.png",
+        "batch_average_pr_curve.png",
         "batch_f1_by_scenario.png",
         "batch_roc_auc_by_scenario.png",
         "batch_pr_auc_by_scenario.png",
@@ -226,7 +228,7 @@ def api_dashboard():
             "best_model": overall_best["model"],
             "best_f1": overall_best["f1"],
             "total_models": len(models),
-            "note": "Best model from aggregate results across all 15 runs",
+            "note": "Best model from aggregate batch results across all runs",
         }
 
     batch_stats = read_batch_stats()

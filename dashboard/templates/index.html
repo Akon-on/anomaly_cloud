@@ -14,7 +14,7 @@
     <section class="hero">
       <p class="chip">ANOMALY CLOUD</p>
       <h1>Experiment Results Dashboard</h1>
-      <p class="lead">Advanced model performance analysis, threshold tuning results, and batch evaluation insights.</p>
+      <p class="lead">Latest single-run details plus aggregate batch results for the final thesis conclusion.</p>
     </section>
 
     <!-- Summary Cards -->
@@ -38,11 +38,11 @@
     <!-- Controls & Filtering -->
     <section class="panel controls-section">
       <div class="controls-header">
-        <h2>Model Performance Analysis</h2>
+        <h2>Latest Single-Run Analysis</h2>
         <div class="controls-actions">
           <button class="btn-control active" data-view="cards">Cards</button>
-          <button class="btn-control" data-view="comparison">Comparison Table</button>
-          <button class="btn-control" data-view="charts">Charts</button>
+          <button class="btn-control" data-view="comparison">Single-Run Table</button>
+          <button class="btn-control" data-view="charts">Single-Run Charts</button>
         </div>
       </div>
       <div class="controls-filters">
@@ -66,7 +66,7 @@
     <section class="panel view-section" id="cardsView">
       <div class="section-header">
         <div>
-          <h2>Current Single Run Model Cards</h2>
+          <h2>Latest Single-Run Model Cards</h2>
           <p class="section-note">These cards show the latest single run only. Use the batch section below for the overall thesis result across all runs.</p>
         </div>
         <button type="button" class="collapse-btn" id="toggleSingleRunBtn" aria-expanded="true">Hide Single Run</button>
@@ -84,7 +84,8 @@
 
     <!-- View 2: Comparison Table -->
     <section class="panel view-section" id="comparisonView" style="display:none;">
-      <h2>Model Comparison Table</h2>
+      <h2>Latest Single-Run Model Comparison Table</h2>
+      <p class="section-note">This table comes from <code>model_comparison.csv</code> and represents only the most recent experiment run.</p>
       <div class="table-wrap">
         <table id="comparisonTable">
           <thead>
@@ -112,7 +113,8 @@
 
     <!-- View 3: Performance Charts -->
     <section class="panel view-section" id="chartsView" style="display:none;">
-      <h2>Performance Metrics Comparison</h2>
+      <h2>Latest Single-Run Performance Charts</h2>
+      <p class="section-note">These charts use the same latest single-run data as the model comparison table.</p>
       <div class="mini-charts-grid">
         <div class="mini-chart">
           <canvas id="f1Chart"></canvas>
@@ -131,7 +133,7 @@
 
     <!-- Batch Results Section -->
     <section class="panel batch-section" id="batchSection" style="display:none;">
-      <h2>Batch Evaluation Results Across All Runs</h2>
+      <h2>Final Batch Evaluation Results Across All Runs</h2>
       <p class="section-note">This is the aggregate result set you should use for your final conclusion.</p>
       <div class="batch-overview" id="batchOverview">
         <!-- Populated by JavaScript -->

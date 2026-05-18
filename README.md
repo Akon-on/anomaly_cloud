@@ -2,13 +2,13 @@
 
 Cloud anomaly detection lab for diploma/thesis work.
 
-This project simulates web traffic (normal + attack), collects logs, builds windowed features, and compares multiple machine learning models for anomaly detection:
+This project simulates web traffic (normal + attack), collects logs, builds windowed features, and compares three main machine learning models for anomaly detection:
 
 - Isolation Forest
-- Tuned Isolation Forest
 - Local Outlier Factor
 - One-Class Support Vector Machine
-- Majority-vote ensemble of base models
+
+Optional rule-based, tuned Isolation Forest, and ensemble variants can be enabled for secondary analysis, but the main diploma comparison focuses on these three ML algorithms.
 
 It is designed for reproducible experiments with scenario-based traffic generation and batch statistics.
 
@@ -24,9 +24,9 @@ It is designed for reproducible experiments with scenario-based traffic generati
 Services are orchestrated with Docker Compose:
 
 - victim: Flask target web application
-- traffic: traffic generator (normal + brute-force style attack)
+- traffic: traffic generator (normal + multiple attack styles)
 - ml: streaming anomaly detector writing anomalies to PostgreSQL
-- ml_eval: offline evaluator that compares all models and creates reports/plots
+- ml_eval: offline evaluator that compares the main ML models and creates reports/plots
 - db: PostgreSQL storage for anomaly records
 - visual: anomaly visualization script
 - dashboard: web UI to browse latest metrics and generated charts
@@ -79,10 +79,14 @@ This will:
 
 Configured in run_experiment.ps1:
 
-- balanced: normal_traffic_ratio = 0.30 (30 percent normal, 70 percent attack)
-- aggressive: normal_traffic_ratio = 0.10 (10 percent normal, 90 percent attack)
-- mostly-normal: normal_traffic_ratio = 0.70 (70 percent normal, 30 percent attack)
-- credential-stuffing: normal_traffic_ratio = 0.05 with leaked-credential attack style
+- balanced: brute-force attack with moderate normal traffic
+- aggressive: brute-force attack with high attack pressure
+- mostly-normal: brute-force attack with mostly normal background traffic
+- credential-stuffing: leaked-credential login attack
+- endpoint-scanning: probing many valid and invalid endpoints
+- burst-traffic: short high-volume traffic spikes
+- slow-brute-force: lower-rate brute-force activity spread over time
+- mixed-attacks: rotating combination of supported attack styles
 
 Important: warmup and cooldown phases are 100 percent normal traffic. The ratio above applies to the attack phase.
 
@@ -91,13 +95,19 @@ Important: warmup and cooldown phases are 100 percent normal traffic. The ratio 
 Run repeated experiments across scenarios:
 
 ```powershell
-./run_batch_experiments.ps1 -RunsPerScenario 10 -Scenarios balanced,aggressive,mostly-normal
+./run_batch_experiments.ps1 -RunsPerScenario 10
 ```
 
 For stronger final thesis evidence, use longer warmup/attack/cooldown phases:
 
 ```powershell
-./run_batch_experiments.ps1 -RunsPerScenario 10 -Scenarios balanced,aggressive,mostly-normal -DurationProfile thesis
+./run_batch_experiments.ps1 -RunsPerScenario 10 -DurationProfile thesis
+```
+
+With the default scenario list this produces:
+
+```text
+8 scenarios x 10 runs x 3 main ML models = 240 model evaluations
 ```
 
 Main batch outputs:
@@ -113,6 +123,8 @@ Main batch outputs:
 - output/batch_best_f1_by_scenario.png: estimated F1 after threshold tuning
 - output/batch_roc_auc_by_scenario.png: batch ROC-AUC chart with standard deviation
 - output/batch_pr_auc_by_scenario.png: batch PR-AUC chart with standard deviation
+- output/batch_average_roc_curve.png: averaged ROC curves from saved per-run curve points
+- output/batch_average_pr_curve.png: averaged precision-recall curves from saved per-run curve points
 
 ## Evaluation outputs
 
@@ -127,6 +139,8 @@ Single-run evaluation produces:
 - output/feature_importance.md
 - output/roc_curve.png
 - output/pr_curve.png
+- output/roc_curve_data.csv
+- output/pr_curve_data.csv
 
 Visualization outputs:
 
@@ -176,7 +190,7 @@ Window features include:
 - distinct_endpoints
 - unique_user_agents
 
-Single-run ROC and PR curves are saved as both legacy names (`roc_curve.png`, `pr_curve.png`) and explicit names (`single_run_roc_curve.png`, `single_run_pr_curve.png`). Batch-level charts should be used for thesis-wide conclusions.
+Single-run ROC and PR curves are saved as `roc_curve.png` and `pr_curve.png`. Batch-level charts should be used for thesis-wide conclusions.
 
 The evaluator also records an estimated best F1 threshold from the precision-recall curve. This is useful for studying false-positive reduction, but it should be described as threshold tuning or validation-calibrated performance, not as the default detector output.
 
@@ -231,10 +245,10 @@ Run long batch and keep timestamped copies (example pattern):
 
 ```powershell
 $ts = Get-Date -Format "yyyyMMdd_HHmmss"
-./run_batch_experiments.ps1 -RunsPerScenario 10 -Scenarios balanced,aggressive,mostly-normal -BaseSeed 12000
-Copy-Item ./output/batch_summary_stats.csv ./output/batch_summary_stats_long_$ts.csv -Force
-Copy-Item ./output/batch_summary_stats.md ./output/batch_summary_stats_long_$ts.md -Force
-Copy-Item ./output/batch_all_runs.csv ./output/batch_all_runs_long_$ts.csv -Force
+./run_batch_experiments.ps1 -RunsPerScenario 10 -DurationProfile thesis -BaseSeed 12000
+Copy-Item ./output/batch_summary_stats.csv ./output/batch_summary_stats_final_$ts.csv -Force
+Copy-Item ./output/batch_summary_stats.md ./output/batch_summary_stats_final_$ts.md -Force
+Copy-Item ./output/batch_all_runs.csv ./output/batch_all_runs_final_$ts.csv -Force
 ```
 
 Rebuild visual service after changing visual/visualize.py:
@@ -264,52 +278,32 @@ Contribution in this repository:
 
 ## Limitations and future work
 
-- Current attacks focus on brute-force and credential-stuffing style login abuse.
+- Current attacks include brute-force, credential-stuffing, slow brute-force, endpoint scanning, burst traffic, and mixed attack scenarios.
 - Results are scenario-driven and may not transfer directly to unrelated production traffic.
 - Explainability currently uses feature-importance and correlation-based proxy scores; SHAP-style local explanations can be added later.
 - Future iterations can include deep autoencoder baselines, online drift adaptation, and larger distributed load tests.
 
 ## Threshold Tuning for False Positive Reduction
 
-By default, anomaly detection uses a contamination-based threshold (fixed percentage of top anomalies). Post-hoc **threshold tuning** uses the ROC curve to find the optimal decision boundary that maximizes the F1-score while minimizing false positives.
+By default, the unsupervised models use their built-in decision boundary. Post-hoc **threshold tuning** uses the precision-recall curve to select an anomaly-score cutoff that maximizes F1 on labeled validation data.
 
-### Impact
+The final thesis-profile batch shows two complementary conclusions:
 
-With optimal threshold tuning applied to LOF (best model):
+- LOF is the best default detector: F1 `0.6270 +/- 0.1296`.
+- OCSVM is the best calibrated detector: tuned F1 `0.9902 +/- 0.0137`.
 
-- **Precision**: 60.8% → 94.1% (+77% improvement)
-- **False Positives**: 113 → 11 (-90% reduction)
-- **Recall**: 100% (maintained - no attacks missed)
-- **F1-Score**: 0.756 → 0.970 (+28% improvement)
+Average false positives per model evaluation decreased strongly after threshold tuning:
 
-### Enabling Threshold Tuning
+| Model | Default F1 | Tuned F1 | Default FP | Tuned FP |
+| --- | ---: | ---: | ---: | ---: |
+| LOF | 0.6270 | 0.9523 | 277.2 | 13.9 |
+| OCSVM | 0.6020 | 0.9902 | 308.6 | 1.5 |
+| Isolation Forest | 0.5529 | 0.8982 | 341.2 | 73.4 |
 
-Set environment variables in docker-compose.yml:
+Generated threshold-tuning figures:
 
-```yaml
-ml:
-	environment:
-		- USE_THRESHOLD_TUNING=true
-		- ANOMALY_THRESHOLD=2.4411  # LOF optimal threshold
-```
+- `output/threshold_tuning_comparison_lof.png`
+- `output/threshold_tuning_comparison_ocsvm.png`
+- `output/threshold_tuning_comparison_isolation_forest.png`
 
-### Optimal Thresholds by Model
-
-```
-Local Outlier Factor (LOF):        2.4411  Recommended
-Isolation Forest:                  0.0799
-Ensemble Majority Vote:            1.3720
-```
-
-### For Thesis Presentation
-
-Threshold tuning is a scientifically valid optimization technique using ROC curve analysis. Include [THRESHOLD_TUNING_RESULTS.md](THRESHOLD_TUNING_RESULTS.md) in your defense materials to show:
-
-1. **Methodology**: ROC curve analysis for threshold selection (standard ML practice)
-2. **Results**: Dramatic false alarm reduction with maintained attack detection
-3. **Production readiness**: Demonstrates optimization for real-world deployment constraints
-
-Key talking points:
-- "We identified optimal decision boundary using precision-recall tradeoff analysis"
-- "Post-training threshold calibration reduces false positives by 90% without missing attacks"
-- "Results show the model can balance detection rate with operational constraints"
+For thesis writing, describe tuned F1 as validation-calibrated performance, not as the raw default detector output.

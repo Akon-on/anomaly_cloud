@@ -56,8 +56,11 @@ Batch artifacts in `output/`:
 - `batch_ranked_summary.txt` (per-scenario ranking)
 - `batch_overall_ranking.txt` (overall ranking)
 - `batch_f1_by_scenario.png`
+- `batch_best_f1_by_scenario.png`
 - `batch_roc_auc_by_scenario.png`
 - `batch_pr_auc_by_scenario.png`
+- `batch_average_roc_curve.png`
+- `batch_average_pr_curve.png`
 - `thesis_results_report.md`
 
 ## Scenario options
@@ -65,6 +68,19 @@ Batch artifacts in `output/`:
 - `balanced`
 - `aggressive`
 - `mostly-normal`
+- `credential-stuffing`
+- `endpoint-scanning`
+- `burst-traffic`
+- `slow-brute-force`
+- `mixed-attacks`
+
+The final thesis-profile batch uses the default scenario list:
+
+```text
+8 scenarios x 10 runs x 3 main ML models = 240 model evaluations
+```
+
+Use `output/batch_*` files for final conclusions. The `output/model_comparison.*`, `output/model_report.*`, `output/roc_curve.png`, and `output/pr_curve.png` files describe only the latest single run.
 
 ## Methodology note
 

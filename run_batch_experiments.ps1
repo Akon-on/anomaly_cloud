@@ -94,6 +94,18 @@ foreach ($scenario in $Scenarios) {
         $runCsvPath = Join-Path $scenarioDir ("run_{0:00}_model_comparison.csv" -f $run)
         Copy-Item -Path $comparisonPath -Destination $runCsvPath -Force
 
+        $rocCurveDataPath = Join-Path $outputDir "roc_curve_data.csv"
+        if (Test-Path $rocCurveDataPath) {
+            $runRocCurveDataPath = Join-Path $scenarioDir ("run_{0:00}_roc_curve_data.csv" -f $run)
+            Copy-Item -Path $rocCurveDataPath -Destination $runRocCurveDataPath -Force
+        }
+
+        $prCurveDataPath = Join-Path $outputDir "pr_curve_data.csv"
+        if (Test-Path $prCurveDataPath) {
+            $runPrCurveDataPath = Join-Path $scenarioDir ("run_{0:00}_pr_curve_data.csv" -f $run)
+            Copy-Item -Path $prCurveDataPath -Destination $runPrCurveDataPath -Force
+        }
+
         $rows = Import-Csv $comparisonPath
         foreach ($row in $rows) {
             $allRows += [pscustomobject]@{
@@ -235,6 +247,12 @@ if ($LASTEXITCODE -ne 0) {
     throw "Failed to generate batch report artifacts"
 }
 
+Write-Host "Generating threshold tuning comparison chart..."
+docker compose run --rm --no-deps visual python generate_threshold_comparison.py
+if ($LASTEXITCODE -ne 0) {
+    throw "Failed to generate threshold tuning comparison chart"
+}
+
 Write-Host "\nBatch experiment artifacts saved:"
 Write-Host "- $allRunsCsv"
 Write-Host "- $summaryCsv"
@@ -247,4 +265,7 @@ Write-Host "- $(Join-Path $outputDir 'batch_overall_ranking.txt')"
 Write-Host "- $(Join-Path $outputDir 'batch_f1_by_scenario.png')"
 Write-Host "- $(Join-Path $outputDir 'batch_roc_auc_by_scenario.png')"
 Write-Host "- $(Join-Path $outputDir 'batch_pr_auc_by_scenario.png')"
+Write-Host "- $(Join-Path $outputDir 'batch_average_roc_curve.png')"
+Write-Host "- $(Join-Path $outputDir 'batch_average_pr_curve.png')"
+Write-Host "- $(Join-Path $outputDir 'threshold_tuning_comparison.png')"
 Write-Host "- $(Join-Path $outputDir 'thesis_results_report.md')"

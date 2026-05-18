@@ -35,24 +35,21 @@ The dataset was generated using controlled synthetic traffic. This approach was 
 - `slow-brute-force`
 - `mixed-attacks`
 
-Each scenario was repeated five times with different random seeds. In total, the batch experiment produced 240 model evaluations:
+Each scenario was repeated ten times with different random seeds. In total, the main machine-learning batch experiment produced 240 model evaluations:
 
-`8 scenarios x 5 runs x 6 models = 240 evaluations`
+`8 scenarios x 10 runs x 3 models = 240 evaluations`
 
 The traffic generator included both normal user behavior and attack behavior. Normal behavior included requests to common endpoints, search requests, health checks, and occasional login attempts. Attack behavior included brute-force login attempts, credential stuffing, endpoint scanning, burst traffic, slow brute-force traffic, and mixed attack patterns.
 
 ## Evaluated Models
 
-The following anomaly detection methods were evaluated:
+The main diploma comparison evaluates three unsupervised machine learning anomaly detection methods:
 
 - Isolation Forest
-- Tuned Isolation Forest
 - Local Outlier Factor
 - One-Class SVM
-- Majority-vote ensemble
-- Rule-based baseline
 
-The rule-based baseline was added as a simple comparison point. It detects suspicious traffic using direct thresholds, such as high request count, high failed login count, high failed login ratio, or many error responses. This baseline is important because it shows whether machine learning provides an advantage over simple handcrafted detection rules.
+The rule-based baseline, tuned Isolation Forest variant, and majority-vote ensemble were excluded from the main ranking to keep the thesis focused on three core machine learning algorithms. They can still be discussed as optional extensions, but the main experimental conclusion is based on the three models above.
 
 ## Evaluation Metrics
 
@@ -70,24 +67,19 @@ The F1-score was used as the main ranking metric because it balances precision a
 
 ## Overall Results
 
-Across all scenarios and runs, the strongest fixed-threshold result was achieved by the rule-based baseline. It reached an average F1-score of `0.7106 +/- 0.1264`. Therefore, when the dashboard shows the rule-based baseline as the best overall model, it is using the aggregate ranking across all scenarios.
+Across all scenarios and runs, the strongest fixed-threshold result among the three main ML models was achieved by Local Outlier Factor. It reached an average F1-score of `0.6270 +/- 0.1296`.
 
-Local Outlier Factor was the strongest unsupervised machine learning model by fixed-threshold F1-score, with an average F1-score of `0.6651 +/- 0.1525`. In other words, the rule-based baseline is the overall winner, while LOF is the best machine learning anomaly detector among the unsupervised models.
+One-Class SVM ranked second by fixed-threshold F1-score, while Isolation Forest ranked third. However, One-Class SVM had the strongest ROC-AUC and PR-AUC values, which shows that its anomaly scores separated normal and attack windows very well even when the default threshold produced many false positives.
 
 The overall ranking was:
 
 | Rank | Model | Runs | F1-score | Best tuned F1 | ROC-AUC | PR-AUC |
 | --- | --- | ---: | --- | --- | --- | --- |
-| 1 | Rule-based baseline | 40 | 0.7106 +/- 0.1264 | 0.9187 +/- 0.0584 | 0.9619 +/- 0.0352 | 0.9437 +/- 0.0617 |
-| 2 | Local Outlier Factor | 40 | 0.6651 +/- 0.1525 | 0.9167 +/- 0.0829 | 0.9628 +/- 0.0523 | 0.9512 +/- 0.0660 |
-| 3 | Majority-vote ensemble | 40 | 0.6461 +/- 0.1333 | 0.9812 +/- 0.0249 | 0.9930 +/- 0.0185 | 0.9897 +/- 0.0227 |
-| 4 | One-Class SVM | 40 | 0.6293 +/- 0.1258 | 0.9800 +/- 0.0289 | 0.9935 +/- 0.0195 | 0.9899 +/- 0.0231 |
-| 5 | Isolation Forest | 40 | 0.6148 +/- 0.1435 | 0.8863 +/- 0.1514 | 0.8689 +/- 0.2052 | 0.7672 +/- 0.2935 |
-| 6 | Tuned Isolation Forest | 40 | 0.6003 +/- 0.1543 | 0.8635 +/- 0.1674 | 0.8645 +/- 0.2102 | 0.7646 +/- 0.3073 |
+| 1 | Local Outlier Factor | 80 | 0.6270 +/- 0.1296 | 0.9523 +/- 0.0400 | 0.9806 +/- 0.0444 | 0.9748 +/- 0.0464 |
+| 2 | One-Class SVM | 80 | 0.6020 +/- 0.1121 | 0.9902 +/- 0.0137 | 0.9970 +/- 0.0083 | 0.9954 +/- 0.0111 |
+| 3 | Isolation Forest | 80 | 0.5529 +/- 0.1343 | 0.8982 +/- 0.1704 | 0.8973 +/- 0.2046 | 0.8083 +/- 0.3188 |
 
-These results show that the simple rule-based baseline performed strongly under the simulated attack conditions. This is expected because several scenarios, especially credential stuffing and brute-force traffic, produce direct indicators such as failed login attempts and high request counts.
-
-However, the ROC-AUC and PR-AUC results show that the ensemble and One-Class SVM had very strong ranking ability. The majority-vote ensemble achieved ROC-AUC `0.9930 +/- 0.0185` and PR-AUC `0.9897 +/- 0.0227`, while One-Class SVM achieved ROC-AUC `0.9935 +/- 0.0195` and PR-AUC `0.9899 +/- 0.0231`. This means that these models can separate normal and anomalous windows well, but their default decision thresholds generate too many false positives.
+These results show that LOF gave the best default balance between precision and recall. One-Class SVM achieved ROC-AUC `0.9970 +/- 0.0083` and PR-AUC `0.9954 +/- 0.0111`, which indicates very strong ranking ability. This means that One-Class SVM can separate normal and anomalous windows well, but its default decision threshold needs calibration to reduce false positives.
 
 ## Results by Scenario
 
@@ -95,22 +87,22 @@ The best model differed depending on the traffic scenario. The following table s
 
 | Scenario | Best model | F1-score |
 | --- | --- | --- |
-| Aggressive | Local Outlier Factor | 0.8626 +/- 0.0917 |
-| Balanced | Local Outlier Factor | 0.5936 +/- 0.1081 |
-| Burst traffic | Tuned Isolation Forest | 0.5200 +/- 0.1013 |
-| Credential stuffing | Rule-based baseline | 0.8776 +/- 0.0255 |
-| Endpoint scanning | Local Outlier Factor | 0.6391 +/- 0.0635 |
-| Mixed attacks | Rule-based baseline | 0.6930 +/- 0.0056 |
-| Mostly normal | Rule-based baseline | 0.8061 +/- 0.0232 |
-| Slow brute force | Rule-based baseline | 0.7985 +/- 0.0250 |
+| Aggressive | Local Outlier Factor | 0.7600 +/- 0.0773 |
+| Balanced | Local Outlier Factor | 0.6010 +/- 0.0899 |
+| Burst traffic | Local Outlier Factor | 0.4839 +/- 0.0805 |
+| Credential stuffing | Local Outlier Factor | 0.8124 +/- 0.0626 |
+| Endpoint scanning | Local Outlier Factor | 0.6188 +/- 0.0863 |
+| Mixed attacks | Local Outlier Factor | 0.6107 +/- 0.0776 |
+| Mostly normal | Local Outlier Factor | 0.5008 +/- 0.0478 |
+| Slow brute force | Local Outlier Factor | 0.6285 +/- 0.0878 |
 
-Local Outlier Factor performed best in the balanced, aggressive, and endpoint-scanning scenarios. This suggests that LOF is effective when anomalous windows differ locally from nearby normal behavior. The rule-based baseline performed best in credential-stuffing, mostly-normal, slow-brute-force, and mixed-attack scenarios. These scenarios contain clear threshold-based indicators, such as repeated failed logins or abnormal request patterns.
+Local Outlier Factor performed best by default F1 in all eight scenarios. This suggests that LOF is the most reliable fixed-threshold detector in this experiment when anomalous windows differ locally from nearby normal behavior.
 
-The burst-traffic scenario was the most difficult. The best fixed-threshold F1-score in this scenario was only `0.5200 +/- 0.1013`, achieved by Tuned Isolation Forest. This indicates that burst traffic can be harder to distinguish from legitimate temporary traffic spikes.
+The burst-traffic scenario was the most difficult. The best fixed-threshold F1-score among the three main ML models in this scenario was only `0.4839 +/- 0.0805`, achieved by LOF. This indicates that burst traffic can be harder to distinguish from legitimate temporary traffic spikes.
 
 ## Threshold Tuning
 
-Threshold tuning significantly improved many model results. For example, the majority-vote ensemble improved from an average F1-score of `0.6461 +/- 0.1333` to a tuned F1-score of `0.9812 +/- 0.0249`. One-Class SVM improved from `0.6293 +/- 0.1258` to `0.9800 +/- 0.0289`.
+Threshold tuning significantly improved many model results. For example, One-Class SVM improved from an average F1-score of `0.6020 +/- 0.1121` to a tuned F1-score of `0.9902 +/- 0.0137`. Local Outlier Factor improved from `0.6270 +/- 0.1296` to `0.9523 +/- 0.0400`.
 
 This shows that the anomaly scores produced by the models contain useful information, even when the default threshold is not optimal. The main issue is not always the model's ability to rank anomalies, but the decision boundary used to convert anomaly scores into final normal/anomalous labels.
 
@@ -118,23 +110,21 @@ For this reason, threshold calibration is an important part of applying anomaly 
 
 ## Confusion Matrix Interpretation
 
-The confusion matrix results show that many unsupervised models detected most attack windows but also produced many false positives. For example, in the aggressive scenario, One-Class SVM detected all attacks on average, with `203.8` true positives and `0.0` false negatives, but it also produced `133.6` false positives. Similarly, Isolation Forest detected all attacks in that scenario but produced `135.6` false positives.
+The confusion matrix results show that many unsupervised models detected most attack windows but also produced many false positives. For example, in the aggressive scenario, One-Class SVM detected all attacks on average, with `387.9` true positives and `0.0` false negatives, but it also produced `301.2` false positives. Similarly, Isolation Forest detected all attacks in that scenario but produced `329.8` false positives.
 
-The rule-based baseline reduced false positives in several scenarios. In the mostly-normal scenario, it produced only `20.0` false positives on average, compared with `73.8` for LOF, `87.8` for Isolation Forest, and `90.8` for One-Class SVM. This explains why the rule-based baseline achieved the best F1-score in mostly-normal traffic.
-
-In endpoint scanning, LOF and One-Class SVM detected all attacks on average, but both produced more than `160` false positives. The rule-based baseline had slightly fewer false positives, with `154.8`, but also missed a small number of attacks, with `1.6` false negatives.
+In the mostly-normal scenario, LOF produced `204.3` false positives on average, compared with `239.4` for Isolation Forest and `225.0` for One-Class SVM. In endpoint scanning, LOF detected most attacks with only `1.4` false negatives on average, while Isolation Forest missed many more attack windows with `87.8` false negatives. This confirms that the main challenge is reducing false alarms without losing attack coverage.
 
 These results show the trade-off between sensitivity and false alarms. Some models maximize recall by detecting nearly all attacks, but this often increases the number of normal windows incorrectly classified as anomalous.
 
 ## Discussion
 
-The experimental results show that anomaly detection performance depends strongly on the type of attack and the traffic distribution. No single model was best in every scenario. The rule-based baseline performed strongly overall because the generated attacks often produced clear indicators, such as failed logins, endpoint errors, and high request rates.
+The experimental results show that anomaly detection performance depends strongly on the type of attack and the traffic distribution. LOF achieved the best fixed-threshold performance in every scenario, while One-Class SVM achieved the strongest calibrated performance after threshold tuning.
 
-At the same time, machine learning models remained valuable. LOF achieved the best fixed-threshold performance in several scenarios, including aggressive traffic, balanced traffic, and endpoint scanning. One-Class SVM and the ensemble model achieved very high ROC-AUC and PR-AUC, which indicates strong ranking quality. With threshold tuning, these models reached very high F1-scores.
+One-Class SVM achieved very high ROC-AUC and PR-AUC, which indicates strong ranking quality. With threshold tuning, it reached the highest tuned F1-score among the three main ML models.
 
 The main practical conclusion is that anomaly detection should not rely only on a default model threshold. A calibrated threshold can greatly reduce false positives while preserving high attack detection. In a real deployment, this threshold should be selected using validation data that represents the target environment.
 
-The results also show the value of comparing machine learning models against a simple baseline. If a rule-based method performs well, then machine learning must provide additional value through better generalization, adaptation to unknown patterns, or improved performance on complex scenarios.
+The results also show why threshold calibration is important for unsupervised anomaly detection. The raw anomaly scores often contain useful information, but a fixed default threshold may create too many false alarms.
 
 ## Limitations
 
@@ -148,7 +138,7 @@ The model performance also depends on scenario configuration, including attack d
 
 Future improvements could include testing the system with real public intrusion detection datasets, adding more attack categories, and deploying the detector in a real cloud environment. The system could also be extended with adaptive threshold selection, online model updating, and explainability methods for showing why a traffic window was classified as anomalous.
 
-Another direction is to combine rule-based detection with machine learning. Since the rule-based baseline performed well in clear attack scenarios and the machine learning models showed strong ranking ability, a hybrid system could use rules for obvious attacks and anomaly scores for less predictable behavior.
+Another direction is to compare the three main ML models with rule-based and ensemble extensions in a separate secondary experiment. This would allow the main thesis to remain focused while still showing how hybrid detection could improve practical deployment.
 
 ## Recommended Figures for Diploma
 
@@ -160,3 +150,8 @@ The following figures are the most useful for the diploma results section:
 - `batch_overall_ranking_table.png`
 - `batch_roc_auc_by_scenario.png`
 - `batch_pr_auc_by_scenario.png`
+- `batch_average_roc_curve.png`
+- `batch_average_pr_curve.png`
+- `threshold_tuning_comparison_lof.png`
+- `threshold_tuning_comparison_ocsvm.png`
+- `threshold_tuning_comparison_isolation_forest.png`

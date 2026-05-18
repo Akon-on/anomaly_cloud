@@ -1,260 +1,108 @@
-# Threshold Tuning - Deployment & Usage Guide
+# Threshold Tuning Deployment Guide
 
-## Quick Start: Enable Threshold Tuning
+## Purpose
 
-### Option 1: Edit docker-compose.yml
+This guide explains how to use threshold tuning after the offline evaluator has produced anomaly scores and ground-truth metrics. Threshold tuning should be treated as a calibration step: it chooses a decision cutoff for a trained anomaly detector.
+
+The final thesis batch should be interpreted like this:
+
+- Best default model: LOF, F1 `0.6270 +/- 0.1296`.
+- Best calibrated model: OCSVM, tuned F1 `0.9902 +/- 0.0137`.
+- Main practical issue: default thresholds create many false positives.
+
+## When to Use Threshold Tuning
+
+Use threshold tuning when you have labeled validation data or controlled simulation labels. In this project, labels come from `traffic_labels.jsonl`, so the evaluator can compare anomaly scores against known normal/attack windows.
+
+Do not describe tuned F1 as the default result. In the diploma, call it validation-calibrated or threshold-tuned performance.
+
+## Finding Thresholds
+
+Run one scenario or a batch experiment:
+
+```powershell
+./run_experiment.ps1 -Scenario balanced
+```
+
+or:
+
+```powershell
+./run_batch_experiments.ps1 -RunsPerScenario 10 -DurationProfile thesis
+```
+
+Then inspect:
+
+```text
+output/model_comparison.csv
+output/batch_all_runs.csv
+```
+
+Useful columns:
+
+- `best_threshold`
+- `best_precision`
+- `best_recall`
+- `best_f1`
+- `best_false_positives`
+- `best_false_negatives`
+
+## Current Batch Averages
+
+| Model | Default F1 | Tuned F1 | Default FP | Tuned FP |
+| --- | ---: | ---: | ---: | ---: |
+| LOF | 0.6270 | 0.9523 | 277.2 | 13.9 |
+| OCSVM | 0.6020 | 0.9902 | 308.6 | 1.5 |
+| Isolation Forest | 0.5529 | 0.8982 | 341.2 | 73.4 |
+
+The average best threshold values in the final batch were approximately:
+
+| Model | Mean best threshold |
+| --- | ---: |
+| LOF | 2.0525 |
+| OCSVM | 9.4857 |
+| Isolation Forest | 0.1786 |
+
+These values are useful for analysis, but a real deployment should validate the threshold on representative traffic before using it operationally.
+
+## Generated Figures
+
+The threshold-tuning comparison images are:
+
+- `output/threshold_tuning_comparison_lof.png`
+- `output/threshold_tuning_comparison_ocsvm.png`
+- `output/threshold_tuning_comparison_isolation_forest.png`
+
+Regenerate them after a new batch run with:
+
+```powershell
+docker compose run --rm --no-deps -e THRESHOLD_MODEL=lof visual python generate_threshold_comparison.py
+docker compose run --rm --no-deps -e THRESHOLD_MODEL=ocsvm visual python generate_threshold_comparison.py
+docker compose run --rm --no-deps -e THRESHOLD_MODEL=isolation_forest visual python generate_threshold_comparison.py
+```
+
+## Runtime Configuration
+
+The streaming detector can be configured with environment variables:
+
+| Variable | Meaning |
+| --- | --- |
+| `MODEL_TYPE` | Model used by the streaming detector, such as `lof`, `ocsvm`, or `isolation_forest` |
+| `USE_THRESHOLD_TUNING` | Whether to apply a fixed anomaly-score threshold |
+| `ANOMALY_THRESHOLD` | Threshold value to compare against the anomaly score |
+| `MODEL_CONTAMINATION` | Contamination setting used by applicable models |
+
+Example:
 
 ```yaml
 ml:
-  build: ml/
   environment:
-    - USE_THRESHOLD_TUNING=true
-    - ANOMALY_THRESHOLD=2.4411      # LOF optimal threshold
-    - MODEL_CONTAMINATION=0.15      # Training contamination
+    MODEL_TYPE: lof
+    USE_THRESHOLD_TUNING: "true"
+    ANOMALY_THRESHOLD: "2.0525"
 ```
 
-### Option 2: Set Environment Variables in PowerShell
+## Thesis Talking Point
 
-```powershell
-$env:USE_THRESHOLD_TUNING = "true"
-$env:ANOMALY_THRESHOLD = "2.4411"
-docker compose up -d ml
-```
+The most important deployment conclusion is:
 
-### Option 3: Command Line Override
-
-```bash
-docker compose run --rm \
-  -e USE_THRESHOLD_TUNING=true \
-  -e ANOMALY_THRESHOLD=2.4411 \
-  ml
-```
-
----
-
-## Finding Optimal Thresholds
-
-### Step 1: Run Evaluation
-```powershell
-./run_experiment.ps1 -Scenario balanced -SkipBuild
-```
-
-### Step 2: Check Results
-```powershell
-cat output/model_comparison.csv | select -Property model, precision, recall, f1, best_threshold, best_precision, best_f1
-```
-
-### Step 3: Extract Optimal Threshold
-Look for the `best_threshold` and `best_f1` columns:
-- `model`: Model name (LOF, isolation_forest, etc.)
-- `best_threshold`: Optimal threshold value
-- `best_precision`: Expected precision at optimal threshold
-- `best_f1`: Expected F1-score at optimal threshold
-
-### Step 4: Deploy
-Update `ANOMALY_THRESHOLD` in docker-compose.yml with the value from Step 3.
-
----
-
-## Optimal Thresholds by Model & Scenario
-
-### Recommended Configuration (LOF + Balanced)
-```
-Model: LOF
-Threshold: 2.4411
-Expected Precision: 94.1%
-Expected Recall: 100%
-Expected F1: 0.970
-```
-
-### Alternative Configurations
-
-#### For High-Precision Scenarios (minimize false alarms)
-```
-Model: LOF
-Threshold: 3.5+
-Expected: Very few false alarms, might miss some attacks
-```
-
-#### For High-Recall Scenarios (catch all attacks)
-```
-Model: LOF
-Threshold: 1.5-2.0
-Expected: High recall, more false alarms
-```
-
----
-
-## Tuning Strategy by Deployment Context
-
-### Production IDS (Security-Critical)
-Use **moderate threshold** (2.4-2.8 range):
-- Catches >95% attacks
-- ~5% false alarm rate
-- Provides security buffer
-
-```yaml
-USE_THRESHOLD_TUNING: true
-ANOMALY_THRESHOLD: 2.6
-```
-
-### Research/Monitoring (Audit Trail)
-Use **low threshold** (1.5-2.0 range):
-- Catches 100% of attacks
-- More false alarms for context
-- Good for pattern discovery
-
-```yaml
-USE_THRESHOLD_TUNING: true
-ANOMALY_THRESHOLD: 1.8
-```
-
-### High-Alert Environment (Maximum Alert Fatigue Reduction)
-Use **high threshold** (3.0+ range):
-- Catches 90%+ attacks
-- Minimal false alarms
-- Risk of missing sophisticated attacks
-
-```yaml
-USE_THRESHOLD_TUNING: true
-ANOMALY_THRESHOLD: 3.2
-```
-
----
-
-## Environment Variables Reference
-
-| Variable | Default | Type | Description |
-|----------|---------|------|-------------|
-| `USE_THRESHOLD_TUNING` | true | boolean | Enable/disable threshold tuning |
-| `ANOMALY_THRESHOLD` | 0.1 | float | Threshold value (unit depends on model) |
-| `MODEL_CONTAMINATION` | 0.15 | float | Training contamination parameter |
-| `MODEL_TYPE` | lof | string | Which model to use (lof, isolation_forest, etc.) |
-
----
-
-## Runtime Behavior
-
-### With Threshold Tuning Enabled
-```
-Raw anomaly score: 2.8
-Threshold: 2.4411
-Decision: 2.8 > 2.4411 → ANOMALY DETECTED ✓
-```
-
-### With Threshold Tuning Disabled
-```
-Default: Use contamination parameter instead
-Effect: ~60% precision, higher false alarm rate
-```
-
----
-
-## Validation Commands
-
-### Verify Threshold Tuning is Active
-```bash
-docker logs anomaly_cloud-ml-1 | grep -i "threshold"
-```
-
-### Check Model Performance with New Threshold
-```powershell
-./run_experiment.ps1 -Scenario aggressive
-# Then compare:
-cat output/model_comparison.csv | grep lof
-```
-
-### Run Batch Validation
-```powershell
-./run_batch_experiments.ps1 -RunsPerScenario 5 -Scenarios balanced,aggressive
-```
-
----
-
-## Troubleshooting
-
-### "Anomalies not being detected (too high threshold)"
-**Solution**: Lower `ANOMALY_THRESHOLD` value
-```yaml
-ANOMALY_THRESHOLD: 2.0  # Reduced from 2.4411
-```
-
-### "Too many false alarms (too low threshold)"
-**Solution**: Raise `ANOMALY_THRESHOLD` value
-```yaml
-ANOMALY_THRESHOLD: 2.8  # Increased from 2.4411
-```
-
-### "Getting different results on different runs"
-**Cause**: Likely different `RANDOM_SEED` values  
-**Solution**: Fix random seed for reproducibility
-```yaml
-RANDOM_SEED: 999
-```
-
-### "Threshold tuning not working"
-**Debug**:
-1. Check `USE_THRESHOLD_TUNING=true` is set
-2. Verify `ANOMALY_THRESHOLD` is a valid float (e.g., 2.4411, not "2.4411")
-3. Check model_comparison.csv has `best_threshold` column
-4. Review ml container logs: `docker logs anomaly_cloud-ml-1`
-
----
-
-## Advanced: Custom Threshold Computation
-
-If you want to compute optimal thresholds for your own data:
-
-```python
-from sklearn.metrics import precision_recall_curve, f1_score
-import numpy as np
-
-# Get your anomaly scores and labels
-scores = model.decision_function(X_test)  # or score_samples()
-y_true = ground_truth_labels
-
-# Compute precision-recall curve
-precision, recall, thresholds = precision_recall_curve(y_true, scores)
-
-# Find threshold that maximizes F1
-f1_scores = 2 * (precision * recall) / (precision + recall + 1e-10)
-optimal_idx = np.argmax(f1_scores)
-optimal_threshold = thresholds[optimal_idx]
-
-print(f"Optimal threshold: {optimal_threshold}")
-print(f"Expected F1: {f1_scores[optimal_idx]}")
-print(f"Expected Precision: {precision[optimal_idx]}")
-print(f"Expected Recall: {recall[optimal_idx]}")
-```
-
----
-
-## Performance Impact
-
-### Detection Latency
-Threshold tuning has **zero impact** on detection latency - it's just a comparison operation.
-
-### Memory Usage
-**Negligible** - threshold is a single float value.
-
-### Computational Cost
-**None** - threshold tuning happens during evaluation, not at runtime.
-
----
-
-## Next Steps
-
-1. ✅ Understand the threshold tuning methodology
-2. ✅ Review your optimal thresholds in model_comparison.csv
-3. ✅ Update docker-compose.yml with tuned values
-4. ✅ Validate with multiple scenario runs
-5. ✅ Document your choices for thesis defense
-6. ✅ Deploy with confidence!
-
----
-
-**For questions about threshold tuning implementation, see:**
-- [THRESHOLD_TUNING_RESULTS.md](THRESHOLD_TUNING_RESULTS.md) - Technical details
-- [VIVA_DEFENSE_GUIDE.md](VIVA_DEFENSE_GUIDE.md) - Defense talking points
-- [ml/model.py](ml/model.py) - Implementation code
-- [ml/evaluate_models.py](ml/evaluate_models.py) - Evaluation code
+> The default detectors were very sensitive and detected most attack windows, but this caused many false positives. Threshold tuning reduced false positives substantially, especially for OCSVM, which achieved the strongest calibrated result across the final batch.

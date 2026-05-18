@@ -1,0 +1,4 @@
+model,precision,recall,f1,accuracy,true_negatives,false_positives,false_negatives,true_positives,roc_auc,pr_auc,best_threshold,best_precision,best_recall,best_f1,best_true_negatives,best_false_positives,best_false_negatives,best_true_positives,label_source,evaluation_mode,train_samples
+lof,0.6235011990407674,1.0,0.7680945347119645,0.6983669548511047,207,314,0,520,0.9827956592351985,0.9849028468702474,0.5152241971155882,0.9894736842105263,0.9038461538461539,0.9447236180904524,516,5,50,470,traffic_ground_truth_ip_window,warmup_normal_baseline,126
+ocsvm,0.6096131301289566,1.0,0.7574654042243263,0.6801152737752162,188,333,0,520,0.9999999999999999,1.0,8.219678033140783,1.0,1.0,1.0,521,0,0,520,traffic_ground_truth_ip_window,warmup_normal_baseline,126
+isolation_forest,0.6081871345029239,1.0,0.7563636363636363,0.6781940441882806,186,335,0,520,1.0,1.0,0.22128147881435012,1.0,1.0,1.0,521,0,0,520,traffic_ground_truth_ip_window,warmup_normal_baseline,126

@@ -261,7 +261,7 @@ if __name__ == "__main__":
         }
         handle.write(json.dumps(metadata) + "\n")
 
-    print("Starting controlled DDoS / brute-force simulation")
+    print("Starting controlled normal/attack traffic simulation")
     print(f"Target: {TARGET}")
     print(
         "Phases: "

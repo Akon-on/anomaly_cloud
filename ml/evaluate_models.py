@@ -37,6 +37,15 @@ RULE_FAILED_LOGINS = float(os.getenv("RULE_FAILED_LOGINS", "3"))
 RULE_FAILED_LOGIN_RATIO = float(os.getenv("RULE_FAILED_LOGIN_RATIO", "0.5"))
 RULE_ERROR_REQUESTS = float(os.getenv("RULE_ERROR_REQUESTS", "3"))
 
+
+def env_flag(name: str, default: str = "false") -> bool:
+    return os.getenv(name, default).strip().lower() in {"1", "true", "yes", "on"}
+
+
+MAIN_ML_MODELS = ("isolation_forest", "lof", "ocsvm")
+INCLUDE_RULE_BASELINE = env_flag("EVAL_INCLUDE_RULE_BASELINE")
+INCLUDE_MODEL_EXTENSIONS = env_flag("EVAL_INCLUDE_MODEL_EXTENSIONS")
+
 logging.basicConfig(
     level=getattr(logging, LOG_LEVEL, logging.INFO),
     format="%(asctime)s %(levelname)s %(message)s",
@@ -180,19 +189,16 @@ def select_training_frame(
     return features, "in_sample_unsupervised"
 
 
-def model_definitions(contamination: float, n_samples: int) -> dict[str, object]:
+def model_definitions(
+    contamination: float,
+    n_samples: int,
+    include_extensions: bool = False,
+) -> dict[str, object]:
     lof_neighbors = max(2, min(20, n_samples - 1))
-    return {
+    models = {
         "isolation_forest": IsolationForest(
             n_estimators=100,
             contamination=contamination,
-            random_state=42,
-        ),
-        "isolation_forest_tuned": IsolationForest(
-            n_estimators=300,
-            max_samples="auto",
-            contamination=contamination,
-            bootstrap=True,
             random_state=42,
         ),
         "lof": LocalOutlierFactor(
@@ -205,6 +211,15 @@ def model_definitions(contamination: float, n_samples: int) -> dict[str, object]
             OneClassSVM(nu=contamination, kernel="rbf", gamma="scale"),
         ),
     }
+    if include_extensions:
+        models["isolation_forest_tuned"] = IsolationForest(
+            n_estimators=300,
+            max_samples="auto",
+            contamination=contamination,
+            bootstrap=True,
+            random_state=42,
+        )
+    return models
 
 
 def fit_predict_and_score(
@@ -412,7 +427,7 @@ def plot_curves(results: dict[str, dict[str, object]], output_dir: Path) -> None
         plt.plot([0, 1], [0, 1], linestyle="--", linewidth=1)
         plt.xlabel("False Positive Rate")
         plt.ylabel("True Positive Rate")
-        plt.title("Single Run ROC Curve Comparison (All Models)")
+        plt.title("Single Run ROC Curve Comparison (Main ML Models)")
         plt.legend(loc="center left", bbox_to_anchor=(1.02, 0.5), frameon=True)
         plt.tight_layout()
         plt.savefig(output_dir / "roc_curve.png", dpi=160, bbox_inches="tight")
@@ -438,11 +453,49 @@ def plot_curves(results: dict[str, dict[str, object]], output_dir: Path) -> None
             )
         plt.xlabel("Recall")
         plt.ylabel("Precision")
-        plt.title("Single Run Precision-Recall Curve Comparison (All Models)")
+        plt.title("Single Run Precision-Recall Curve Comparison (Main ML Models)")
         plt.legend(loc="center left", bbox_to_anchor=(1.02, 0.5), frameon=True)
         plt.tight_layout()
         plt.savefig(output_dir / "pr_curve.png", dpi=160, bbox_inches="tight")
         plt.close()
+
+
+def write_curve_data(results: dict[str, dict[str, object]], output_dir: Path) -> None:
+    roc_rows = []
+    pr_rows = []
+
+    for model_name, metrics in results.items():
+        if metrics.get("roc_data") is not None:
+            fpr, tpr = metrics["roc_data"]
+            for point_index, (fpr_value, tpr_value) in enumerate(zip(fpr, tpr)):
+                roc_rows.append(
+                    {
+                        "model": model_name,
+                        "point_index": point_index,
+                        "fpr": float(fpr_value),
+                        "tpr": float(tpr_value),
+                        "roc_auc": metrics.get("roc_auc", np.nan),
+                    }
+                )
+
+        if metrics.get("pr_data") is not None:
+            recall, precision = metrics["pr_data"]
+            for point_index, (recall_value, precision_value) in enumerate(zip(recall, precision)):
+                pr_rows.append(
+                    {
+                        "model": model_name,
+                        "point_index": point_index,
+                        "recall": float(recall_value),
+                        "precision": float(precision_value),
+                        "pr_auc": metrics.get("pr_auc", np.nan),
+                    }
+                )
+
+    if roc_rows:
+        pd.DataFrame(roc_rows).to_csv(output_dir / "roc_curve_data.csv", index=False)
+
+    if pr_rows:
+        pd.DataFrame(pr_rows).to_csv(output_dir / "pr_curve_data.csv", index=False)
 
 
 def main() -> None:
@@ -521,7 +574,20 @@ def main() -> None:
         }
     )
 
-    for name, model in model_definitions(CONTAMINATION, len(training_features)).items():
+    if not INCLUDE_RULE_BASELINE:
+        rows = [row for row in rows if row["model"] != "rule_based_baseline"]
+        results.pop("rule_based_baseline", None)
+        importance_frames = [
+            frame
+            for frame in importance_frames
+            if frame.empty or frame["model"].iloc[0] != "rule_based_baseline"
+        ]
+
+    for name, model in model_definitions(
+        CONTAMINATION,
+        len(training_features),
+        include_extensions=INCLUDE_MODEL_EXTENSIONS,
+    ).items():
         predictions, score = fit_predict_and_score(model, X_train, X_eval)
         y_pred_binary = (predictions == -1).astype(int)
         prediction_map[name] = y_pred_binary
@@ -561,7 +627,7 @@ def main() -> None:
 
     # Majority-vote ensemble from the three baseline unsupervised models.
     ensemble_members = ["isolation_forest", "lof", "ocsvm"]
-    if all(name in prediction_map for name in ensemble_members):
+    if INCLUDE_MODEL_EXTENSIONS and all(name in prediction_map for name in ensemble_members):
         stacked_preds = np.vstack([prediction_map[name] for name in ensemble_members])
         ensemble_pred = (stacked_preds.sum(axis=0) >= 2).astype(int)
 
@@ -654,6 +720,9 @@ def main() -> None:
         handle.write(f"Samples: {len(features)}\n")
         handle.write(f"Window size: {WINDOW_SIZE}\n")
         handle.write(f"Contamination: {CONTAMINATION}\n\n")
+        handle.write("Main ML models: " + ", ".join(MAIN_ML_MODELS) + "\n")
+        handle.write(f"Rule baseline included: {INCLUDE_RULE_BASELINE}\n")
+        handle.write(f"Model extensions included: {INCLUDE_MODEL_EXTENSIONS}\n\n")
         handle.write("Features\n")
         handle.write("--------\n")
         handle.write(", ".join(FEATURE_COLUMNS))
@@ -672,11 +741,15 @@ def main() -> None:
         handle.write(f"- Samples: {len(features)}\n")
         handle.write(f"- Window size: {WINDOW_SIZE}\n")
         handle.write(f"- Contamination: {CONTAMINATION}\n\n")
+        handle.write("- Main ML models: " + ", ".join(MAIN_ML_MODELS) + "\n")
+        handle.write(f"- Rule baseline included: {INCLUDE_RULE_BASELINE}\n")
+        handle.write(f"- Model extensions included: {INCLUDE_MODEL_EXTENSIONS}\n\n")
         handle.write("- Features: " + ", ".join(FEATURE_COLUMNS) + "\n\n")
         handle.write("## Model Comparison (Sorted by F1)\n\n")
         handle.write(comparison_md.read_text(encoding="utf-8"))
 
     plot_curves(results, OUTPUT_DIR)
+    write_curve_data(results, OUTPUT_DIR)
 
     logger.info("Saved evaluation artifacts:")
     logger.info("- %s", comparison_csv)
@@ -688,6 +761,8 @@ def main() -> None:
     logger.info("- %s", report_md)
     logger.info("- %s", OUTPUT_DIR / "roc_curve.png")
     logger.info("- %s", OUTPUT_DIR / "pr_curve.png")
+    logger.info("- %s", OUTPUT_DIR / "roc_curve_data.csv")
+    logger.info("- %s", OUTPUT_DIR / "pr_curve_data.csv")
 
 
 if __name__ == "__main__":
